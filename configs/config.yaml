@@ -1,0 +1,30 @@
+env: development
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+
+db:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  name: app
+  ssl_mode: disable
+  max_conns: 20
+  min_conns: 2
+  max_conn_life: 30m
+  migrations_path: file://migrations
+
+jwt:
+  secret: change-me-in-production
+  access_ttl: 15m
+  refresh_ttl: 168h
+  issuer: goapp
+
+log:
+  level: debug

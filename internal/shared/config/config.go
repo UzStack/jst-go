@@ -1,0 +1,138 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	Env  string     `mapstructure:"env"`
+	HTTP HTTPConfig `mapstructure:"http"`
+	DB   DBConfig   `mapstructure:"db"`
+	JWT  JWTConfig  `mapstructure:"jwt"`
+	Log  LogConfig  `mapstructure:"log"`
+}
+
+type HTTPConfig struct {
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+func (h HTTPConfig) Addr() string {
+	return fmt.Sprintf("%s:%d", h.Host, h.Port)
+}
+
+type DBConfig struct {
+	Host           string        `mapstructure:"host"`
+	Port           int           `mapstructure:"port"`
+	User           string        `mapstructure:"user"`
+	Password       string        `mapstructure:"password"`
+	Name           string        `mapstructure:"name"`
+	SSLMode        string        `mapstructure:"ssl_mode"`
+	MaxConns       int32         `mapstructure:"max_conns"`
+	MinConns       int32         `mapstructure:"min_conns"`
+	MaxConnLife    time.Duration `mapstructure:"max_conn_life"`
+	MigrationsPath string        `mapstructure:"migrations_path"`
+}
+
+func (d DBConfig) DSN() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		d.User, d.Password, d.Host, d.Port, d.Name, d.SSLMode,
+	)
+}
+
+func (d DBConfig) MigrationsURL() string {
+	return d.DSN()
+}
+
+type JWTConfig struct {
+	Secret     string        `mapstructure:"secret"`
+	AccessTTL  time.Duration `mapstructure:"access_ttl"`
+	RefreshTTL time.Duration `mapstructure:"refresh_ttl"`
+	Issuer     string        `mapstructure:"issuer"`
+}
+
+type LogConfig struct {
+	Level string `mapstructure:"level"`
+}
+
+func Load() (*Config, error) {
+	v := viper.New()
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath("./configs")
+	v.AddConfigPath(".")
+
+	setDefaults(v)
+
+	v.SetEnvPrefix("APP")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	if err := v.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
+	}
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (c *Config) validate() error {
+	if c.JWT.Secret == "" || c.JWT.Secret == "change-me" {
+		if c.Env == "production" {
+			return fmt.Errorf("jwt.secret must be set in production")
+		}
+	}
+	if c.DB.Host == "" {
+		return fmt.Errorf("db.host required")
+	}
+	return nil
+}
+
+func setDefaults(v *viper.Viper) {
+	v.SetDefault("env", "development")
+
+	v.SetDefault("http.host", "0.0.0.0")
+	v.SetDefault("http.port", 8080)
+	v.SetDefault("http.read_timeout", "15s")
+	v.SetDefault("http.write_timeout", "15s")
+	v.SetDefault("http.idle_timeout", "60s")
+	v.SetDefault("http.shutdown_timeout", "10s")
+
+	v.SetDefault("db.host", "localhost")
+	v.SetDefault("db.port", 5432)
+	v.SetDefault("db.user", "postgres")
+	v.SetDefault("db.password", "postgres")
+	v.SetDefault("db.name", "app")
+	v.SetDefault("db.ssl_mode", "disable")
+	v.SetDefault("db.max_conns", 20)
+	v.SetDefault("db.min_conns", 2)
+	v.SetDefault("db.max_conn_life", "30m")
+	v.SetDefault("db.migrations_path", "file://migrations")
+
+	v.SetDefault("jwt.secret", "change-me")
+	v.SetDefault("jwt.access_ttl", "15m")
+	v.SetDefault("jwt.refresh_ttl", "168h")
+	v.SetDefault("jwt.issuer", "goapp")
+
+	v.SetDefault("log.level", "info")
+}
