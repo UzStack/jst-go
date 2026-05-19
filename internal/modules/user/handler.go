@@ -16,6 +16,16 @@ func NewHandler(uc Usecase) *Handler {
 	return &Handler{uc: uc}
 }
 
+// Me godoc
+// @Summary      Get current user
+// @Description  Returns the authenticated user's profile.
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  UserResponse
+// @Failure      401  {object}  httpx.ErrorResponse
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Router       /users/me [get]
 func (h *Handler) Me(c *gin.Context) {
 	uid, err := uuid.Parse(middleware.UserID(c))
 	if err != nil {
@@ -30,6 +40,19 @@ func (h *Handler) Me(c *gin.Context) {
 	httpx.OK(c, 200, toResponse(u))
 }
 
+// UpdateMe godoc
+// @Summary      Update current user
+// @Description  Updates the authenticated user's name.
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      UpdateMeRequest        true  "Update payload"
+// @Success      200   {object}  UserResponse
+// @Failure      400   {object}  httpx.ErrorResponse
+// @Failure      401   {object}  httpx.ErrorResponse
+// @Failure      404   {object}  httpx.ErrorResponse
+// @Router       /users/me [patch]
 func (h *Handler) UpdateMe(c *gin.Context) {
 	uid, err := uuid.Parse(middleware.UserID(c))
 	if err != nil {
@@ -55,6 +78,15 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	httpx.OK(c, 200, toResponse(u))
 }
 
+// DeleteMe godoc
+// @Summary      Delete current user
+// @Description  Permanently deletes the authenticated user.
+// @Tags         users
+// @Security     BearerAuth
+// @Success      204
+// @Failure      401  {object}  httpx.ErrorResponse
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Router       /users/me [delete]
 func (h *Handler) DeleteMe(c *gin.Context) {
 	uid, err := uuid.Parse(middleware.UserID(c))
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"github.com/example/goapp/internal/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // Server wires the dependency graph. Adding a new module is a single block
@@ -40,6 +42,11 @@ func (s *Server) registerRoutes() {
 	s.router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Swagger UI: /swagger/index.html — disabled in production by default.
+	if s.cfg.Env != "production" {
+		s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
 
 	v1 := s.router.Group("/api/v1")
 

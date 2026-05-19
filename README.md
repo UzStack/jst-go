@@ -40,6 +40,17 @@ curl http://localhost:8080/healthz
 
 `make dev` ishga tushishi bilan migrationlar avtomatik qo'llaniladi (`internal/shared/database/migrate.go`). Production'da bu xatti-harakatni o'zgartirib, CLI orqali boshqarishingiz mumkin.
 
+### Swagger UI
+
+Server ishlayotganda (development rejimi): http://localhost:8080/swagger/index.html
+
+Handler annotatsiyalari o'zgartirilgach docs'ni qayta generatsiya qiling:
+```bash
+make swag
+```
+
+Generated fayllar: `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` (qo'lda tegmaslik kerak).
+
 ## API namunasi
 
 ```bash

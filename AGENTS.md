@@ -209,6 +209,73 @@ Frontend bu kodlarga binoan localized xabar ko'rsatadi.
 - **fmt.Errorf("xxx: %w", err)** bilan o'rab boring (wrap), `%v` emas.
 - **panic ishlatma** — `httpx.Internal(err)` qaytar.
 
+## 5b. Swagger/OpenAPI annotatsiyalari — MAJBURIY
+
+**Har bir HTTP handler funksiyasi yuqorisida swag annotatsiyasi bo'lishi shart.** Hech qachon annotatsiyasiz endpoint qo'shma — `/swagger/index.html` to'liq bo'lib turishi kerak.
+
+### 5b.1 Standart shablon
+
+```go
+// MethodName godoc
+// @Summary      Short title (one line)
+// @Description  Longer explanation — what it does, side effects.
+// @Tags         <module>
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth          // faqat auth talab qiladigan endpointlarda
+// @Param        body  body      <RequestType>           true   "Description"
+// @Param        id    path      string                  true   "User ID (uuid)"
+// @Param        page  query     int                     false  "Page number"
+// @Success      200   {object}  <ResponseType>
+// @Success      204
+// @Failure      400   {object}  httpx.ErrorResponse
+// @Failure      401   {object}  httpx.ErrorResponse
+// @Failure      404   {object}  httpx.ErrorResponse
+// @Failure      500   {object}  httpx.ErrorResponse
+// @Router       /<path>  [<method>]
+func (h *Handler) MethodName(c *gin.Context) { ... }
+```
+
+### 5b.2 Annotation qoidalari
+
+| Tag | Majburiy | Tushuntirish |
+|---|---|---|
+| `@Summary` | ✅ | Bitta jumla, til — inglizcha (SwaggerUI universal). |
+| `@Description` | ✅ | 1-3 jumla — endpoint nima qiladi, side effect nima. |
+| `@Tags` | ✅ | Modul nomi — Swagger UI'da gruppalash uchun. |
+| `@Accept` | request body bo'lsa | Odatda `json`. |
+| `@Produce` | response bo'lsa | Odatda `json`. |
+| `@Security` | auth kerakmi | `BearerAuth` — middleware.Auth bo'lgan endpointlarda. |
+| `@Param` | parametr bor bo'lsa | `name location type required "desc"` formatda. |
+| `@Success` | ✅ kamida bitta | Status code + qaytadigan tip. |
+| `@Failure` | barchasi | Mumkin bo'lgan **barcha** xato statuslari (400, 401, 404, 409, 500). |
+| `@Router` | ✅ | Yo'l + method, masalan `/users/me [get]`. |
+
+### 5b.3 Refresh workflow
+
+Handler annotatsiyasi yoki DTO o'zgarsa:
+
+```bash
+make swag      # docs/ qayta generatsiya bo'ladi
+```
+
+`docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` — **generated, qo'lda tegma**.
+
+### 5b.4 Tekshirish
+
+Server'ni ishga tushirib (`make dev`), `http://localhost:8080/swagger/index.html` ochib ko'r:
+
+- Yangi endpoint ro'yxatda bormi
+- Request body misoli to'g'rimi
+- Barcha mumkin bo'lgan xato statuslari ro'yxatdami
+- `Authorize` tugmasi bilan token kiritib, protected endpoint ishlayaptimi
+
+### 5b.5 Production rejim
+
+`server.go`'da swagger faqat `cfg.Env != "production"` paytda mount qilinadi. Production'da `/swagger/*` 404 qaytaradi — bu xavfsizlik chorasi.
+
+Agar production'da ham kerak bo'lsa (internal admin uchun), shartni o'zgartir va **kamida basic auth** bilan himoyala.
+
 ## 6. HTTP handler qoidalari
 
 ### 6.1 Standart shablon
@@ -324,30 +391,147 @@ log.Error("payment failed",
 - **Strukturali field** ishlat, message ichida `%s` bilan format qilma.
 - `log.Fatal` faqat startup'da (DB connect, config load) ishlatiladi.
 
-## 9. Test qoidalari
+## 9. Test qoidalari — MAJBURIY
 
-### 9.1 Unit test (usecase)
+**Har bir yangi API endpoint uchun test yozish shart.** Test yozilmagan endpoint — PR'ga qabul qilinmaydi. Bu qoida AI agent uchun ham, inson uchun ham.
 
-`fakeRepo` (in-memory Repository implementation) bilan. Real DB chaqirma.
+### 9.1 Test piramidasi
+
+| Qatlam | Test turi | Qachon | Tezligi |
+|---|---|---|---|
+| Domain entity | unit | logika murakkab bo'lsa | mikrosaniya |
+| **Usecase** | **unit (fakeRepo)** | **HAR DOIM** | millisaniya |
+| **Handler** | **HTTP test (httptest)** | **HAR DOIM** | millisaniya |
+| Repository | integration (testcontainers postgres) | har repository metodi uchun | soniya |
+| End-to-end | docker-compose + real HTTP | ihtiyoriy, smoke uchun | soniya-daqiqa |
+
+**Minimum kafolat**: usecase + handler test'lari **har endpoint** uchun bor.
+
+### 9.2 Usecase unit test — namuna
+
+`internal/modules/user/usecase_test.go` ga qarang. Shablon:
 
 ```go
 type fakeRepo struct { /* maps */ }
 func (r *fakeRepo) Create(ctx context.Context, u *user.User) error { ... }
-// ... boshqa metodlar
+// barcha Repository metodlari
+
+func TestRegister_DuplicateEmail(t *testing.T) {
+    uc := user.NewUsecase(newFakeRepo())
+    // ...
+    _, err := uc.Register(context.Background(), in)
+
+    var ae *httpx.AppError
+    if !errors.As(err, &ae) || ae.Code != "user.email_taken" {
+        t.Errorf("expected email_taken AppError, got %v", err)
+    }
+}
 ```
 
-### 9.2 Integration test (repository)
+### 9.3 Handler HTTP test — namuna
+
+`internal/modules/auth/handler_test.go` ga qarang. Shablon:
+
+```go
+func newTestServer(t *testing.T) *gin.Engine {
+    gin.SetMode(gin.TestMode)
+    repo := newFakeUserRepo()
+    uc := user.NewUsecase(repo)
+    tokens := auth.NewTokenIssuer(config.JWTConfig{Secret: "test", ...})
+    authUC := auth.NewUsecase(uc, tokens)
+    r := gin.New()
+    auth.RegisterRoutes(r.Group("/api/v1"), auth.NewHandler(authUC))
+    return r
+}
+
+func doJSON(t *testing.T, r *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {
+    buf, _ := json.Marshal(body)
+    req := httptest.NewRequest(method, path, bytes.NewReader(buf))
+    req.Header.Set("Content-Type", "application/json")
+    w := httptest.NewRecorder()
+    r.ServeHTTP(w, req)
+    return w
+}
+
+func TestLogin_InvalidCredentials(t *testing.T) {
+    r := newTestServer(t)
+    // register first
+    _ = doJSON(t, r, http.MethodPost, "/api/v1/auth/register", ...)
+    // wrong password
+    w := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", auth.LoginRequest{
+        Email: "...", Password: "wrong",
+    })
+    if w.Code != http.StatusUnauthorized {
+        t.Fatalf("got %d, want 401", w.Code)
+    }
+}
+```
+
+### 9.4 Har endpoint uchun test cover qilish kerak holatlar
+
+- ✅ **Happy path** — to'g'ri request, 2xx javob, response body to'g'ri.
+- ✅ **Validation error** — invalid body → 400 + `request.invalid` code + details.
+- ✅ **Auth error** — protected endpoint uchun token yo'q/buzilgan → 401.
+- ✅ **Not found** — mavjud bo'lmagan resurs → 404 + to'g'ri code.
+- ✅ **Conflict** — masalan duplicate email → 409.
+- ✅ **Forbidden** — boshqa userning resursiga tegishga urinish (agar RBAC bo'lsa) → 403.
+
+Minimum **kamida happy path + 1 ta xato holat** har endpoint uchun.
+
+### 9.5 Integration test (repository)
 
 [testcontainers-go](https://github.com/testcontainers/testcontainers-go) bilan real postgres ko'tarib `*pgxpool.Pool` ga `NewPostgresRepository`'ni qo'llang. **Mock DB ishlatma** — sxema xatolari prod'da paydo bo'ladi.
 
-### 9.3 Test naming
+```go
+func setupDB(t *testing.T) *pgxpool.Pool {
+    ctx := context.Background()
+    pg, err := postgres.Run(ctx, "postgres:16-alpine",
+        postgres.WithDatabase("test"),
+        postgres.WithUsername("test"),
+        postgres.WithPassword("test"),
+        testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp")),
+    )
+    if err != nil { t.Fatal(err) }
+    t.Cleanup(func() { _ = pg.Terminate(ctx) })
 
-`TestRegister_AndAuthenticate`, `TestRegister_DuplicateEmail` — `Test<Method>_<Case>` formatda.
+    dsn, _ := pg.ConnectionString(ctx, "sslmode=disable")
+    pool, err := pgxpool.New(ctx, dsn)
+    if err != nil { t.Fatal(err) }
+    t.Cleanup(pool.Close)
+
+    if err := database.MigrateUp(dsn, "file://../../migrations"); err != nil {
+        t.Fatal(err)
+    }
+    return pool
+}
+```
+
+### 9.6 Test naming
+
+`Test<Method>_<Case>` formatda — case'lar inglizcha:
+
+- `TestRegister_Success`
+- `TestRegister_DuplicateEmail`
+- `TestLogin_InvalidCredentials`
+- `TestRefresh_InvalidToken`
+- `TestMe_Unauthorized`
+
+### 9.7 CI da ishlash
 
 ```bash
 make test    # race detector bilan
 make cover   # coverage.html
 ```
+
+Pull request oldidan **`make test` muvaffaqiyatli o'tishi shart**. CI'da ham shu buyruq.
+
+### 9.8 Yo'l qo'yib bo'lmaydigan shortcut'lar
+
+- ❌ "Vaqt yo'q, keyin yozaman" — endpoint test bilan birga keladi.
+- ❌ "Trivialdir" — trivial bo'lsa, test ham trivial — yozish 30 soniya.
+- ❌ Mock DB (`sqlmock`) repository test uchun — real postgres ishlat.
+- ❌ Faqat happy path — kamida 1 ta xato holat ham.
+- ❌ `t.Skip(...)` flaky test'ga — sababini topib fix qil.
 
 ## 10. Konfiguratsiya
 
@@ -388,7 +572,7 @@ make cover   # coverage.html
 
 ```bash
 make help              # barcha buyruqlar
-make install-tools     # air, migrate, sqlc, golangci-lint o'rnatish
+make install-tools     # air, migrate, sqlc, swag, golangci-lint o'rnatish
 make db-up             # postgres docker'da ko'tarish
 make dev               # air bilan hot reload
 make run               # oddiy go run
@@ -398,6 +582,8 @@ make cover             # coverage.html
 make lint              # golangci-lint
 make fmt               # gofmt + goimports
 make sqlc              # SQL → Go generation
+make swag              # handler annotatsiyalardan OpenAPI/Swagger generate
+make swag-fmt          # annotatsiyalarni formatlash
 make migrate-new NAME=...
 make migrate-up / migrate-down / migrate-force V=...
 make up / down         # to'liq docker stack
@@ -413,10 +599,16 @@ make up / down         # to'liq docker stack
 - **DO NOT** GORM, sqlx, yoki boshqa ORM qo'shma — sqlc + pgx yetadi.
 - **DO NOT** `log.Println` ishlat — `zap` orqali.
 - **DO NOT** global state qo'shma — DI orqali server.go'da wire qil.
+- **DO NOT** yangi endpoint qo'sh **swag annotatsiyasiz** — `make swag` tushib qoladi.
+- **DO NOT** yangi endpoint qo'sh **test yozmasdan** — minimum 1 happy path + 1 error case.
+- **DO NOT** `docs/` papkasini qo'lda tahrirla — `make swag` ishlat.
 - **DO** har feature uchun `domain.go` da `Repository` interface yoz.
 - **DO** har repository metodida `errors.Is(err, pgx.ErrNoRows)` tekshir.
 - **DO** har handler'da DTO validatsiyani 2 qadamga ajrat: `ShouldBindJSON` → `validator.Struct`.
-- **DO** har commit oldidan `go build ./... && go vet ./... && go test ./...` ishlatib ko'r.
+- **DO** har handler funksiyasi yuqorisida **`// @Summary ... @Router`** annotatsiyasini yoz.
+- **DO** har handler uchun **HTTP test** yoz (`httptest.NewRecorder` + fakeRepo bilan).
+- **DO** annotatsiya/DTO o'zgargach `make swag` yurit, generated `docs/` ni commitga qo'sh.
+- **DO** har commit oldidan `make swag && go build ./... && go vet ./... && go test ./...` ishlatib ko'r.
 
 ## 16. Production checklist (deploy oldidan)
 

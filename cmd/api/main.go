@@ -9,11 +9,31 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/example/goapp/docs"
 	"github.com/example/goapp/internal/server"
 	"github.com/example/goapp/internal/shared/config"
 	"github.com/example/goapp/internal/shared/database"
 	"github.com/example/goapp/internal/shared/logger"
 )
+
+// @title           jst-go API
+// @version         1.0
+// @description     Go clean architecture template — gin + pgx + sqlc + JWT auth.
+// @termsOfService  http://swagger.io/terms/
+//
+// @contact.name   JscorpTech
+// @contact.url    https://github.com/JscorpTech/jst-go
+// @contact.email  admin@jscorp.uz
+//
+// @license.name  MIT
+//
+// @host      localhost:8080
+// @BasePath  /api/v1
+//
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Type "Bearer <access_token>" in the Value field.
 
 func main() {
 	cfg, err := config.Load()

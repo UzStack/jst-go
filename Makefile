@@ -84,6 +84,15 @@ migrate-force: ## Force migration version: make migrate-force V=1
 sqlc: ## Generate sqlc code from queries/*.sql
 	sqlc generate
 
+# ------------------ swagger ---------------
+.PHONY: swag
+swag: ## Generate Swagger/OpenAPI docs from handler annotations
+	swag init -g cmd/api/main.go --output docs --parseDependency --parseInternal
+
+.PHONY: swag-fmt
+swag-fmt: ## Format swag annotations in source files
+	swag fmt -g cmd/api/main.go
+
 # ------------------ docker ----------------
 .PHONY: docker-build
 docker-build: ## Build docker image
@@ -99,8 +108,9 @@ down: ## Tear down docker stack
 
 # ------------------ tools -----------------
 .PHONY: install-tools
-install-tools: ## Install dev tools (air, migrate, sqlc, golangci-lint)
+install-tools: ## Install dev tools (air, migrate, sqlc, swag, golangci-lint)
 	go install github.com/air-verse/air@latest
 	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+	go install github.com/swaggo/swag/cmd/swag@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
