@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: app
+      POSTGRES_DB: jstgo
     ports:
       - "5432:5432"
     volumes:
@@ -26,7 +26,7 @@ services:
       APP_DB_PORT: 5432
       APP_DB_USER: postgres
       APP_DB_PASSWORD: postgres
-      APP_DB_NAME: app
+      APP_DB_NAME: jstgo
       APP_JWT_SECRET: dev-secret-change-me
       APP_ENV: development
     ports:

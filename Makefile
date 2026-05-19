@@ -3,7 +3,7 @@
 APP_NAME      ?= goapp
 BIN_DIR       ?= bin
 PKG           ?= ./...
-DB_URL        ?= postgres://postgres:postgres@localhost:5432/app?sslmode=disable
+DB_URL        ?= postgres://postgres:postgres@localhost:5432/jstgo?sslmode=disable
 MIGRATIONS    ?= ./migrations
 
 # ------------------ help ------------------
@@ -59,7 +59,7 @@ db-down: ## Stop Postgres
 
 .PHONY: db-psql
 db-psql: ## Open psql shell on local DB
-	docker compose exec db psql -U postgres -d app
+	docker compose exec db psql -U postgres -d jstgo
 
 .PHONY: migrate-up
 migrate-up: ## Apply all up migrations

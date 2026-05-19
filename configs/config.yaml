@@ -13,7 +13,7 @@ db:
   port: 5432
   user: postgres
   password: postgres
-  name: app
+  name: jstgo
   ssl_mode: disable
   max_conns: 20
   min_conns: 2
