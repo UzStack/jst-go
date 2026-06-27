@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"time"
@@ -10,14 +11,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// TokenIssuer creates and verifies access tokens. It implements
+// TokenIssuer creates and verifies RS256 access/refresh tokens. It signs with
+// the RSA private key and verifies with the public key. It implements
 // middleware.TokenVerifier.
 type TokenIssuer struct {
-	cfg config.JWTConfig
+	priv *rsa.PrivateKey
+	pub  *rsa.PublicKey
+	cfg  config.JWTConfig
 }
 
-func NewTokenIssuer(cfg config.JWTConfig) *TokenIssuer {
-	return &TokenIssuer{cfg: cfg}
+// NewTokenIssuer builds an issuer from a parsed RSA key pair. Use LoadKeys to
+// read the pair from the configured PEM files.
+func NewTokenIssuer(priv *rsa.PrivateKey, pub *rsa.PublicKey, cfg config.JWTConfig) *TokenIssuer {
+	return &TokenIssuer{priv: priv, pub: pub, cfg: cfg}
 }
 
 type Claims struct {
@@ -57,8 +63,8 @@ func (t *TokenIssuer) sign(userID uuid.UUID, kind, role string, ttl time.Duratio
 		TokenType: kind,
 		Role:      role,
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := tok.SignedString([]byte(t.cfg.Secret))
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signed, err := tok.SignedString(t.priv)
 	if err != nil {
 		return "", uuid.Nil, time.Time{}, fmt.Errorf("sign token: %w", err)
 	}
@@ -90,11 +96,11 @@ func (t *TokenIssuer) VerifyRefreshToken(token string) (userID string, jti uuid.
 
 func (t *TokenIssuer) verify(token, expectedType string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(tk *jwt.Token) (any, error) {
-		if _, ok := tk.Method.(*jwt.SigningMethodHMAC); !ok {
+		if _, ok := tk.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", tk.Header["alg"])
 		}
-		return []byte(t.cfg.Secret), nil
-	}, jwt.WithIssuer(t.cfg.Issuer), jwt.WithValidMethods([]string{"HS256"}))
+		return t.pub, nil
+	}, jwt.WithIssuer(t.cfg.Issuer), jwt.WithValidMethods([]string{"RS256"}))
 	if err != nil {
 		return nil, err
 	}

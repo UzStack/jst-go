@@ -63,7 +63,10 @@ func main() {
 		log.Info("auto-migrate disabled; run migrations via CLI (make migrate-up)")
 	}
 
-	srv := server.New(rootCtx, cfg, log, pool)
+	srv, err := server.New(rootCtx, cfg, log, pool)
+	if err != nil {
+		log.Fatal("server init failed", logger.Err(err))
+	}
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTP.Addr(),

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/UzStack/jst-go/internal/modules/auth"
@@ -24,14 +25,22 @@ type Server struct {
 	log    *logger.Logger
 	pool   *pgxpool.Pool
 	router *gin.Engine
+	tokens *auth.TokenIssuer
 }
 
 // New builds the server. ctx governs background workers (e.g. the WebSocket
 // hub), which stop when it is cancelled — pass the root/shutdown context.
-func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxpool.Pool) *Server {
+// It loads the RS256 key pair and fails if the keys are missing/invalid.
+func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxpool.Pool) (*Server, error) {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	priv, pub, err := auth.LoadKeys(cfg.JWT, cfg.Env)
+	if err != nil {
+		return nil, fmt.Errorf("load jwt keys: %w", err)
+	}
+	tokens := auth.NewTokenIssuer(priv, pub, cfg.JWT)
 
 	r := gin.New()
 	r.Use(
@@ -44,9 +53,9 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 		middleware.Timeout(cfg.HTTP.RequestTimeout),
 	)
 
-	s := &Server{cfg: cfg, log: log, pool: pool, router: r}
+	s := &Server{cfg: cfg, log: log, pool: pool, router: r, tokens: tokens}
 	s.registerRoutes(ctx)
-	return s
+	return s, nil
 }
 
 func (s *Server) Router() http.Handler { return s.router }
@@ -79,7 +88,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	userUC := user.NewUsecase(userRepo)
 
 	// auth module — depends on user usecase + jwt issuer + refresh store
-	tokens := auth.NewTokenIssuer(s.cfg.JWT)
+	tokens := s.tokens
 	refreshStore := auth.NewRefreshStore(s.pool)
 	authUC := auth.NewUsecase(userUC, tokens, refreshStore)
 	auth.RegisterRoutes(v1, auth.NewHandler(authUC))

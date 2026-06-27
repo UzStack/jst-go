@@ -29,7 +29,10 @@ db:
   auto_migrate: true # run pending migrations on startup (disable in prod, use CLI)
 
 jwt:
-  secret: change-me-in-production
+  # RS256 — private key signs, public key verifies. Dev'da fayllar bo'lmasa
+  # avtomatik generatsiya qilinadi; PRODUCTION'da har deploy yangi kalit bilan.
+  private_key_path: keys/jwt_private.pem
+  public_key_path: keys/jwt_public.pem
   access_ttl: 15m
   refresh_ttl: 168h
   issuer: goapp

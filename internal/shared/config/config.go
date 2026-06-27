@@ -67,11 +67,15 @@ func (d DBConfig) MigrationsURL() string {
 	return d.DSN()
 }
 
+// JWTConfig configures RS256 token signing. Tokens are signed with the RSA
+// private key and verified with the public key (asymmetric — verifiers never
+// hold signing material).
 type JWTConfig struct {
-	Secret     string        `mapstructure:"secret"`
-	AccessTTL  time.Duration `mapstructure:"access_ttl"`
-	RefreshTTL time.Duration `mapstructure:"refresh_ttl"`
-	Issuer     string        `mapstructure:"issuer"`
+	PrivateKeyPath string        `mapstructure:"private_key_path"`
+	PublicKeyPath  string        `mapstructure:"public_key_path"`
+	AccessTTL      time.Duration `mapstructure:"access_ttl"`
+	RefreshTTL     time.Duration `mapstructure:"refresh_ttl"`
+	Issuer         string        `mapstructure:"issuer"`
 }
 
 type LogConfig struct {
@@ -109,16 +113,9 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// minSecretLen is the minimum acceptable HS256 secret length in bytes.
-const minSecretLen = 32
-
 func (c *Config) validate() error {
-	if c.Env == "production" {
-		// Reject empty, placeholder, or too-short secrets regardless of the
-		// exact placeholder string shipped in configs/config.yaml.
-		if len(c.JWT.Secret) < minSecretLen || strings.Contains(c.JWT.Secret, "change-me") {
-			return fmt.Errorf("jwt.secret must be a strong value (>= %d bytes) in production", minSecretLen)
-		}
+	if c.JWT.PrivateKeyPath == "" || c.JWT.PublicKeyPath == "" {
+		return fmt.Errorf("jwt.private_key_path and jwt.public_key_path are required")
 	}
 	if c.DB.Host == "" {
 		return fmt.Errorf("db.host required")
@@ -154,7 +151,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("db.migrations_path", "file://migrations")
 	v.SetDefault("db.auto_migrate", true)
 
-	v.SetDefault("jwt.secret", "change-me")
+	v.SetDefault("jwt.private_key_path", "keys/jwt_private.pem")
+	v.SetDefault("jwt.public_key_path", "keys/jwt_public.pem")
 	v.SetDefault("jwt.access_ttl", "15m")
 	v.SetDefault("jwt.refresh_ttl", "168h")
 	v.SetDefault("jwt.issuer", "goapp")

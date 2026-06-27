@@ -17,6 +17,14 @@ help: ## Show this help
 run: ## Run the API (no hot reload)
 	go run ./cmd/api
 
+.PHONY: gen-keys
+gen-keys: ## Generate a fresh RS256 key pair into keys/ (run per environment)
+	@mkdir -p keys
+	@openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/jwt_private.pem
+	@openssl rsa -in keys/jwt_private.pem -pubout -out keys/jwt_public.pem
+	@chmod 600 keys/jwt_private.pem
+	@echo "Wrote keys/jwt_private.pem + keys/jwt_public.pem — NEVER reuse across environments."
+
 .PHONY: dev
 dev: ## Run with hot reload (requires `air`)
 	air

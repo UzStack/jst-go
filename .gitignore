@@ -11,6 +11,9 @@
 .env
 .env.local
 
+# JWT RS256 keys — never commit; generate per environment (make gen-keys)
+/keys/*.pem
+
 # coverage
 coverage.out
 coverage.html

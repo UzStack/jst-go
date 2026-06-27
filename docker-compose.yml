@@ -27,8 +27,7 @@ services:
       APP_DB_USER: postgres
       APP_DB_PASSWORD: postgres
       APP_DB_NAME: jstgo
-      APP_JWT_SECRET: dev-secret-change-me
-      APP_ENV: development
+      APP_ENV: development # dev: RS256 keylar /app/keys ichida avtomatik generatsiya bo'ladi
     ports:
       - "8080:8080"
 

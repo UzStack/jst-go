@@ -27,6 +27,10 @@ COPY --from=builder /out/api /app/api
 COPY --chown=app:app configs ./configs
 COPY --chown=app:app migrations ./migrations
 
+# Writable dir for RS256 keys. In dev they auto-generate here; in production
+# mount your own freshly-generated keys (read-only) over this path.
+RUN mkdir -p /app/keys && chown app:app /app/keys
+
 USER app
 
 EXPOSE 8080

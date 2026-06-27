@@ -154,10 +154,23 @@ Viper `configs/config.yaml` + `APP_*` env vars. Production'da odatda env-only:
 
 ```
 APP_DB_HOST=db.prod.local
-APP_JWT_SECRET=$(openssl rand -hex 32)
 APP_ENV=production
 APP_LOG_LEVEL=info
+APP_JWT_PRIVATE_KEY_PATH=/run/secrets/jwt_private.pem
+APP_JWT_PUBLIC_KEY_PATH=/run/secrets/jwt_public.pem
 ```
+
+### JWT kalitlari (RS256)
+
+Tokenlar **RS256** bilan imzolanadi: **private key** imzolaydi, **public key** tekshiradi (asimmetrik — verifierlar hech qachon imzo materialini ushlamaydi). Kalitlar `keys/` papkasida:
+
+```bash
+make gen-keys   # keys/jwt_private.pem (0600) + keys/jwt_public.pem
+```
+
+- **Development**: kalitlar bo'lmasa, startup'da avtomatik generatsiya qilinadi (`keys/`ga yoziladi). Qulay — `make run` darrov ishlaydi.
+- **Production**: avtomatik generatsiya YO'Q. Kalitlar bo'lmasa server ishga tushmaydi (fail-fast). **Har deploy uchun YANGI kalit generatsiya qiling** va secret manager / mounted secret orqali bering — dev kalitlarni yoki eski kalitni qayta ishlatmang. Kalit almashtirilsa barcha mavjud tokenlar bekor bo'ladi (rolling deploy'da public keylarni bir muddat ikkalasini ham qabul qiladigan qilib qo'ying yoki qisqa access TTL'ga tayaning).
+- Kalitlar **hech qachon git'ga commit qilinmaydi** (`.gitignore`da `keys/*.pem`).
 
 ## Testlash
 
@@ -203,7 +216,7 @@ make cover             # coverage.html
 
 ## Xavfsizlik & operatsion eslatmalar
 
-- **JWT secret** — `APP_ENV=production`da `APP_JWT_SECRET` 32+ baytli bo'lishi shart va `change-me` so'zini o'z ichiga olmasligi kerak, aks holda startup'da `config.validate()` xato beradi.
+- **JWT kalitlari (RS256)** — private key imzolaydi, public key tekshiradi. Production'da kalitlar majburiy (auto-gen yo'q) va **har deploy yangi kalit** bilan. Batafsil: yuqoridagi "JWT kalitlari" bo'limi.
 - **Refresh token revocation + rotation** — refresh tokenlar `jti` bo'yicha `refresh_tokens` jadvalida saqlanadi. `Refresh` har chaqirilganda eski token revoke qilinadi (rotation — replay himoyasi), `/auth/logout` esa tokenni darhol bekor qiladi. Access tokenlar stateless (15m), shuning uchun rol o'zgarishi keyingi refreshda kuchga kiradi. Eskirgan tokenlarni tozalash uchun `DeleteExpiredRefreshTokens` queryni cron/job'da ishlating.
 - **Rate limiting** — `APP_HTTP_RATE_LIMIT_RPS` orqali per-IP token bucket (0 = o'chiq). Bu **instance-local** — bir nechta replica orqasida har biri alohida cheklaydi; global limit kerak bo'lsa Redis'ga ko'chiring.
 - **CORS** — `APP_HTTP_CORS_ORIGINS` (default `*`). Production'da aniq originlar yozing.
@@ -212,7 +225,8 @@ make cover             # coverage.html
 
 ## Production checklist
 
-- [ ] `APP_JWT_SECRET` 32+ baytli random qiymat (`openssl rand -hex 32`).
+- [ ] RS256 kalitlari **shu deploy uchun yangi** generatsiya qilingan (`make gen-keys`), dev/eski kalit emas.
+- [ ] Private key secret manager / mounted secret'da (git'da emas).
 - [ ] `APP_ENV=production` (gin release mode).
 - [ ] `APP_DB_AUTO_MIGRATE=false` + migration alohida job/init container'da.
 - [ ] `APP_HTTP_CORS_ORIGINS` aniq originlarga cheklangan.

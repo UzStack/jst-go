@@ -15,23 +15,18 @@ func TestDSN_EscapesSpecialChars(t *testing.T) {
 	}
 }
 
-func TestValidate_RejectsWeakSecretInProd(t *testing.T) {
-	base := func(secret string) *Config {
-		return &Config{Env: "production", JWT: JWTConfig{Secret: secret}, DB: DBConfig{Host: "db"}}
+func TestValidate_RequiresKeyPaths(t *testing.T) {
+	// missing key paths fail
+	missing := &Config{DB: DBConfig{Host: "db"}}
+	if err := missing.validate(); err == nil {
+		t.Error("expected error when jwt key paths are empty")
 	}
-	// placeholder / short secrets must fail in production
-	for _, s := range []string{"", "change-me", "change-me-in-production", "short"} {
-		if err := base(s).validate(); err == nil {
-			t.Errorf("expected error for prod secret %q, got nil", s)
-		}
+	// both set passes
+	ok := &Config{
+		DB:  DBConfig{Host: "db"},
+		JWT: JWTConfig{PrivateKeyPath: "keys/p.pem", PublicKeyPath: "keys/pub.pem"},
 	}
-	// a strong 32+ byte secret passes
-	if err := base("a-really-long-and-random-secret-value-123").validate(); err != nil {
-		t.Errorf("expected strong secret to pass, got %v", err)
-	}
-	// dev env is lenient
-	dev := &Config{Env: "development", JWT: JWTConfig{Secret: "change-me"}, DB: DBConfig{Host: "db"}}
-	if err := dev.validate(); err != nil {
-		t.Errorf("dev env should not enforce secret strength, got %v", err)
+	if err := ok.validate(); err != nil {
+		t.Errorf("expected valid config, got %v", err)
 	}
 }

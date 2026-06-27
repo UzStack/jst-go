@@ -3,6 +3,8 @@ package auth_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -117,8 +119,11 @@ func newTestServer(t *testing.T) (*gin.Engine, *auth.Handler) {
 
 	repo := newFakeUserRepo()
 	uc := user.NewUsecase(repo)
-	tokens := auth.NewTokenIssuer(config.JWTConfig{
-		Secret:     "test-secret",
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("gen key: %v", err)
+	}
+	tokens := auth.NewTokenIssuer(priv, &priv.PublicKey, config.JWTConfig{
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 24 * time.Hour,
 		Issuer:     "goapp-test",

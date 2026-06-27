@@ -2,6 +2,8 @@ package ws_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,9 +25,12 @@ func newWSTestServer(t *testing.T) (*httptest.Server, *auth.TokenIssuer) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	tokens := auth.NewTokenIssuer(config.JWTConfig{
-		Secret: "test-secret-long-enough-1234567890", AccessTTL: time.Minute,
-		RefreshTTL: time.Hour, Issuer: "ws-test",
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("gen key: %v", err)
+	}
+	tokens := auth.NewTokenIssuer(priv, &priv.PublicKey, config.JWTConfig{
+		AccessTTL: time.Minute, RefreshTTL: time.Hour, Issuer: "ws-test",
 	})
 
 	hub := ws.NewHub()
