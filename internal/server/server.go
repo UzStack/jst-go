@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/UzStack/jst-go/internal/modules/auth"
 	"github.com/UzStack/jst-go/internal/modules/user"
+	"github.com/UzStack/jst-go/internal/modules/ws"
 	"github.com/UzStack/jst-go/internal/shared/buildinfo"
 	"github.com/UzStack/jst-go/internal/shared/config"
 	"github.com/UzStack/jst-go/internal/shared/logger"
@@ -24,7 +26,9 @@ type Server struct {
 	router *gin.Engine
 }
 
-func New(cfg *config.Config, log *logger.Logger, pool *pgxpool.Pool) *Server {
+// New builds the server. ctx governs background workers (e.g. the WebSocket
+// hub), which stop when it is cancelled — pass the root/shutdown context.
+func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxpool.Pool) *Server {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -41,13 +45,13 @@ func New(cfg *config.Config, log *logger.Logger, pool *pgxpool.Pool) *Server {
 	)
 
 	s := &Server{cfg: cfg, log: log, pool: pool, router: r}
-	s.registerRoutes()
+	s.registerRoutes(ctx)
 	return s
 }
 
 func (s *Server) Router() http.Handler { return s.router }
 
-func (s *Server) registerRoutes() {
+func (s *Server) registerRoutes(ctx context.Context) {
 	// Liveness: process is up. Cheap, never touches the DB.
 	s.router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": buildinfo.Version})
@@ -82,4 +86,10 @@ func (s *Server) registerRoutes() {
 
 	// user routes need the verifier from auth
 	user.RegisterRoutes(v1, user.NewHandler(userUC), tokens)
+
+	// websocket module — hub runs until ctx is cancelled; auth via the token
+	// verifier during the handshake. Origins reuse the HTTP CORS allow-list.
+	hub := ws.NewHub()
+	go hub.Run(ctx)
+	ws.RegisterRoutes(v1, ws.NewHandler(hub, tokens, s.cfg.HTTP.CORSOrigins))
 }

@@ -91,6 +91,27 @@ curl -X PATCH http://localhost:8080/api/v1/users/<USER_ID>/role \
 
 > **Rollar (RBAC):** har user `role` ustuniga ega (default `user`). Access token ichida `role` claim bo'ladi; `middleware.RequireRole("admin")` admin-only endpointlarni himoya qiladi. Birinchi adminni DB orqali bering: `UPDATE users SET role='admin' WHERE email='...';`
 
+## WebSocket
+
+`internal/modules/ws/` — bitta **hub** (yagona goroutine, locksiz state) barcha ulanishlarga xabar tarqatadi. Handshake **auth** bilan himoyalangan: access token `?token=` query yoki `Authorization` header orqali tekshiriladi (brauzerlar WS'da header yubora olmaydi), upgrade'dan **oldin** — noto'g'ri token oddiy `401` qaytaradi.
+
+Production xususiyatlari: ping/pong heartbeat + read/write deadline, `maxMessageSize` limit, sekin clientni hub'ni bloklamasdan drop qilish, `CheckOrigin` (HTTP CORS ro'yxatidan), `ctx` orqali graceful shutdown.
+
+```js
+// Brauzer
+const token = "<ACCESS_TOKEN>";
+const ws = new WebSocket(`ws://localhost:8080/api/v1/ws?token=${token}`);
+ws.onmessage = (e) => console.log(JSON.parse(e.data)); // {type:"message", from:"<uid>", body:"..."}
+ws.onopen = () => ws.send("salom");                    // hamma ulangan clientlarga broadcast
+```
+
+```bash
+# CLI (wscat)
+wscat -c "ws://localhost:8080/api/v1/ws?token=<ACCESS_TOKEN>"
+```
+
+Demo xatti-harakat: kelgan har bir text xabar `{type,from,body}` envelopeda barcha clientlarga broadcast qilinadi (chat namunasi). O'zingizning routingingiz uchun `hub.go` dagi `readPump` ni o'zgartiring. Hub'dan kodda foydalanish: `hub.Broadcast(payload)` yoki `hub.SendToUser(userID, payload)`.
+
 ## Yangi modul qo'shish
 
 1. `internal/modules/<name>/` papka yarat.
@@ -160,8 +181,9 @@ make cover             # coverage.html
 ├── configs/config.yaml           # default config
 ├── internal/
 │   ├── modules/
-│   │   ├── user/                 # CRUD + me endpoints
-│   │   └── auth/                 # JWT register/login/refresh
+│   │   ├── user/                 # CRUD + me + admin (RBAC) endpoints
+│   │   ├── auth/                 # JWT register/login/refresh/logout
+│   │   └── ws/                   # authenticated WebSocket hub
 │   ├── shared/
 │   │   ├── config/               # viper loader
 │   │   ├── database/             # pgxpool + migrate

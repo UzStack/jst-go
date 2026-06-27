@@ -63,7 +63,7 @@ func main() {
 		log.Info("auto-migrate disabled; run migrations via CLI (make migrate-up)")
 	}
 
-	srv := server.New(cfg, log, pool)
+	srv := server.New(rootCtx, cfg, log, pool)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTP.Addr(),

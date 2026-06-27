@@ -436,6 +436,25 @@ paths:
       summary: Update current user
       tags:
       - users
+  /ws:
+    get:
+      description: Authenticated WebSocket. Pass the access token via ?token= or the
+        Authorization header. Echoes/broadcasts text messages to all connected clients.
+      parameters:
+      - description: Access token (browsers can't send the Authorization header)
+        in: query
+        name: token
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+      summary: Open a WebSocket connection
+      tags:
+      - ws
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer <access_token>" in the Value field.

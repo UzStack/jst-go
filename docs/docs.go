@@ -511,6 +511,34 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/ws": {
+            "get": {
+                "description": "Authenticated WebSocket. Pass the access token via ?token= or the Authorization header. Echoes/broadcasts text messages to all connected clients.",
+                "tags": [
+                    "ws"
+                ],
+                "summary": "Open a WebSocket connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Access token (browsers can't send the Authorization header)",
+                        "name": "token",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
