@@ -1,29 +1,24 @@
-run:
-  timeout: 5m
+version: "2"
 
 linters:
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
     - bodyclose
     - misspell
     - unconvert
     - gosec
+  settings:
+    gosec:
+      excludes:
+        - G104 # unhandled errors are covered by errcheck
+  exclusions:
+    rules:
+      # Test files: allow unchecked errors and noisy security rules.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+formatters:
+  enable:
     - gofmt
     - goimports
-
-linters-settings:
-  gosec:
-    excludes:
-      - G104 # unhandled errors are covered by errcheck
-
-issues:
-  exclude-rules:
-    # Test files: allow unchecked errors and noisy security rules.
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
