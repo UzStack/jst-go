@@ -16,8 +16,9 @@ import (
 
 // LoadKeys reads the RS256 key pair from the configured paths. In non-production
 // environments a missing pair is generated on the fly (dev convenience) and
-// written to disk. In production missing keys are a fatal error — deploys must
-// supply their own freshly generated keys (never reuse dev keys).
+// written to disk. In production missing keys are a fatal error — supply your
+// own keys (generated once per environment with `make gen-keys` and reused
+// across deploys; never reuse the dev keys).
 func LoadKeys(cfg config.JWTConfig, env string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
 	if env != "production" {
 		if _, err := os.Stat(cfg.PrivateKeyPath); errors.Is(err, os.ErrNotExist) {

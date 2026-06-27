@@ -65,6 +65,7 @@ func (h *Handler) Connect(c *gin.Context) {
 		send:   make(chan []byte, sendBuffer),
 		userID: uid,
 		role:   role,
+		rooms:  make(map[string]struct{}),
 	}
 	h.hub.register <- client
 

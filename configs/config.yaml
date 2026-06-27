@@ -30,7 +30,8 @@ db:
 
 jwt:
   # RS256 — private key signs, public key verifies. Dev'da fayllar bo'lmasa
-  # avtomatik generatsiya qilinadi; PRODUCTION'da har deploy yangi kalit bilan.
+  # avtomatik generatsiya qilinadi; PRODUCTION'da kalit bir marta yaratilib
+  # (make gen-keys) barcha deploylarda qayta ishlatiladi (secret manager).
   private_key_path: keys/jwt_private.pem
   public_key_path: keys/jwt_public.pem
   access_ttl: 15m

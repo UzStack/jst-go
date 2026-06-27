@@ -111,3 +111,51 @@ func TestBroadcast_DeliversToAllClients(t *testing.T) {
 		}
 	}
 }
+
+func dial(t *testing.T, srv *httptest.Server, tokens *auth.TokenIssuer) *gorilla.Conn {
+	t.Helper()
+	c, resp, err := gorilla.DefaultDialer.Dial(wsURL(srv.URL, mintToken(t, tokens)), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	_ = resp.Body.Close()
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
+
+func TestRooms_DeliverOnlyToMembers(t *testing.T) {
+	srv, tokens := newWSTestServer(t)
+
+	c1 := dial(t, srv, tokens) // joins room A
+	c2 := dial(t, srv, tokens) // joins room A
+	c3 := dial(t, srv, tokens) // not in room A
+
+	for _, c := range []*gorilla.Conn{c1, c2} {
+		if err := c.WriteJSON(ws.Inbound{Type: "join", Room: "A"}); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+	}
+	time.Sleep(100 * time.Millisecond) // let joins settle
+
+	if err := c1.WriteJSON(ws.Inbound{Type: "message", Room: "A", Body: "hi-room"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	// members receive
+	for i, c := range []*gorilla.Conn{c1, c2} {
+		_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		var msg ws.Message
+		if err := c.ReadJSON(&msg); err != nil {
+			t.Fatalf("member %d read: %v", i+1, err)
+		}
+		if msg.Room != "A" || msg.Body != "hi-room" {
+			t.Errorf("member %d got %+v, want room=A body=hi-room", i+1, msg)
+		}
+	}
+
+	// non-member must NOT receive the room message
+	_ = c3.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	if _, _, err := c3.ReadMessage(); err == nil {
+		t.Error("non-member received a room message it should not have")
+	}
+}

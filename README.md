@@ -110,7 +110,32 @@ ws.onopen = () => ws.send("salom");                    // hamma ulangan clientla
 wscat -c "ws://localhost:8080/api/v1/ws?token=<ACCESS_TOKEN>"
 ```
 
-Demo xatti-harakat: kelgan har bir text xabar `{type,from,body}` envelopeda barcha clientlarga broadcast qilinadi (chat namunasi). O'zingizning routingingiz uchun `hub.go` dagi `readPump` ni o'zgartiring. Hub'dan kodda foydalanish: `hub.Broadcast(payload)` yoki `hub.SendToUser(userID, payload)`.
+### Rooms (guruhlar)
+
+Hub uch xil ko'lamda yuboradi: **hammaga**, **bitta userga**, va **room**ga (ko'p user qo'shiladigan guruh). Client kichik JSON protokol bilan boshqaradi:
+
+```js
+ws.send(JSON.stringify({ type: "join",  room: "general" }));            // guruhga qo'shilish
+ws.send(JSON.stringify({ type: "leave", room: "general" }));            // chiqish
+ws.send(JSON.stringify({ type: "message", room: "general", body: "hi" })); // guruhga xabar
+ws.send(JSON.stringify({ type: "message", body: "hi" }));               // hammaga (room yo'q)
+ws.send("salom");                                                       // JSON bo'lmasa -> hammaga broadcast
+```
+
+Kelgan xabar a'zolarga `{type:"message", from:"<uid>", room:"general", body:"hi"}` ko'rinishida yetadi. Uzilganda client barcha roomlardan avtomatik chiqariladi.
+
+**Server tomondan** (kod ichidan) — app logikasi bilan boshqarish:
+```go
+hub.JoinUser(userID, "order-42")          // userning barcha ulanishlarini room'ga qo'sh
+hub.LeaveUser(userID, "order-42")
+hub.BroadcastToRoom("order-42", payload)   // room a'zolariga yubor
+hub.SendToUser(userID, payload)            // bitta userga
+hub.Broadcast(payload)                      // hammaga
+```
+
+> **Xavfsizlik:** hozir client-side `join` ochiq — istalgan user istalgan room'ga kira oladi. Yopiq guruhlar uchun `hub.go` dagi `readPump` ichidagi `"join"` joyiga **ruxsat tekshiruvini** qo'shing (bu user shu room a'zosimi?), yoki client join'ni o'chirib faqat server-side `hub.JoinUser` bilan boshqaring. Joy `// ponytail:` komment bilan belgilangan.
+
+O'zingizning routingingiz uchun `hub.go` dagi `handleInbound` ni o'zgartiring.
 
 ## Yangi modul qo'shish
 
@@ -169,7 +194,10 @@ make gen-keys   # keys/jwt_private.pem (0600) + keys/jwt_public.pem
 ```
 
 - **Development**: kalitlar bo'lmasa, startup'da avtomatik generatsiya qilinadi (`keys/`ga yoziladi). Qulay — `make run` darrov ishlaydi.
-- **Production**: avtomatik generatsiya YO'Q. Kalitlar bo'lmasa server ishga tushmaydi (fail-fast). **Har deploy uchun YANGI kalit generatsiya qiling** va secret manager / mounted secret orqali bering — dev kalitlarni yoki eski kalitni qayta ishlatmang. Kalit almashtirilsa barcha mavjud tokenlar bekor bo'ladi (rolling deploy'da public keylarni bir muddat ikkalasini ham qabul qiladigan qilib qo'ying yoki qisqa access TTL'ga tayaning).
+- **Production**: avtomatik generatsiya YO'Q. Kalitlar bo'lmasa server ishga tushmaydi (fail-fast).
+- **Kalit bir marta yaratiladi** (har muhit uchun: prod uchun bir marta) va secret manager / mounted secret'da saqlanib, **barcha deploylarda qayta ishlatiladi**. Har deployda yangilamang — bu barcha mavjud tokenlarni bekor qiladi (hammani logout qiladi).
+- Prodda **dev kalitlarni ishlatmang** — prod uchun alohida o'z kalitingizni yarating.
+- **Rotation** (xavfsizlik hodisasi yoki kalit sizib chiqsa) — ataylab qilinadigan ish: yangi kalit bering, eski tokenlar bekor bo'ladi (yumshoq o'tish uchun qisqa access TTL'ga tayaning yoki bir muddat ikkala public keyni qabul qiling).
 - Kalitlar **hech qachon git'ga commit qilinmaydi** (`.gitignore`da `keys/*.pem`).
 
 ## Testlash
@@ -216,7 +244,7 @@ make cover             # coverage.html
 
 ## Xavfsizlik & operatsion eslatmalar
 
-- **JWT kalitlari (RS256)** — private key imzolaydi, public key tekshiradi. Production'da kalitlar majburiy (auto-gen yo'q) va **har deploy yangi kalit** bilan. Batafsil: yuqoridagi "JWT kalitlari" bo'limi.
+- **JWT kalitlari (RS256)** — private key imzolaydi, public key tekshiradi. Production'da kalitlar majburiy (auto-gen yo'q). Kalit **bir marta** yaratilib barcha deploylarda qayta ishlatiladi (secret manager'da). Batafsil: yuqoridagi "JWT kalitlari" bo'limi.
 - **Refresh token revocation + rotation** — refresh tokenlar `jti` bo'yicha `refresh_tokens` jadvalida saqlanadi. `Refresh` har chaqirilganda eski token revoke qilinadi (rotation — replay himoyasi), `/auth/logout` esa tokenni darhol bekor qiladi. Access tokenlar stateless (15m), shuning uchun rol o'zgarishi keyingi refreshda kuchga kiradi. Eskirgan tokenlarni tozalash uchun `DeleteExpiredRefreshTokens` queryni cron/job'da ishlating.
 - **Rate limiting** — `APP_HTTP_RATE_LIMIT_RPS` orqali per-IP token bucket (0 = o'chiq). Bu **instance-local** — bir nechta replica orqasida har biri alohida cheklaydi; global limit kerak bo'lsa Redis'ga ko'chiring.
 - **CORS** — `APP_HTTP_CORS_ORIGINS` (default `*`). Production'da aniq originlar yozing.
@@ -225,7 +253,7 @@ make cover             # coverage.html
 
 ## Production checklist
 
-- [ ] RS256 kalitlari **shu deploy uchun yangi** generatsiya qilingan (`make gen-keys`), dev/eski kalit emas.
+- [ ] RS256 kalitlari prod uchun **bir marta** generatsiya qilingan (`make gen-keys`), dev kalit emas; barcha deploylarda qayta ishlatiladi.
 - [ ] Private key secret manager / mounted secret'da (git'da emas).
 - [ ] `APP_ENV=production` (gin release mode).
 - [ ] `APP_DB_AUTO_MIGRATE=false` + migration alohida job/init container'da.
