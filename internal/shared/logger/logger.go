@@ -26,9 +26,11 @@ func New(env, level string) (*Logger, error) {
 		return nil, fmt.Errorf("parse log level: %w", err)
 	}
 	cfg.Level = zap.NewAtomicLevelAt(lvl)
-	cfg.DisableStacktrace = lvl > zapcore.ErrorLevel
 
-	return cfg.Build(zap.AddCallerSkip(0))
+	// The development config attaches a stack trace at Warn+, which spams every
+	// 4xx request log with a useless trace pointing at the logger middleware.
+	// Only attach traces at Error+ (panics already log debug.Stack themselves).
+	return cfg.Build(zap.AddStacktrace(zapcore.ErrorLevel))
 }
 
 func String(k, v string) Field                 { return zap.String(k, v) }

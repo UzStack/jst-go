@@ -175,7 +175,7 @@ Migrate library startda avtomatik chaqiriladi (`MigrateUp`), shu sababli local d
 
 ## Konfiguratsiya
 
-Viper `configs/config.yaml` + `APP_*` env vars. Production'da odatda env-only:
+Viper `configs/config.yaml` + `APP_*` env vars. Startup'da `.env` fayli ham avtomatik yuklanadi (`.env.example`dan nusxa oling). Ustunlik tartibi: **real env > `.env` > `config.yaml` > defaultlar**. Production'da odatda env-only:
 
 ```
 APP_DB_HOST=db.prod.local

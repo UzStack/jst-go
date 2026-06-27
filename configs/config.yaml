@@ -9,17 +9,17 @@ http:
   shutdown_timeout: 10s
   request_timeout: 30s # per-request context deadline (0 disables)
   max_header_bytes: 1048576 # 1 MiB
-  max_body_bytes: 1048576   # 1 MiB request body cap
+  max_body_bytes: 1048576 # 1 MiB request body cap
   cors_origins:
     - "*"
-  rate_limit_rps: 0   # per-IP req/sec; 0 disables
+  rate_limit_rps: 0 # per-IP req/sec; 0 disables
   rate_limit_burst: 20
 
 db:
   host: localhost
   port: 5432
   user: postgres
-  password: postgres
+  password: 23092005
   name: jstgo
   ssl_mode: disable
   max_conns: 20

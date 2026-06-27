@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -83,6 +84,12 @@ type LogConfig struct {
 }
 
 func Load() (*Config, error) {
+	// Load .env into the process environment so APP_* vars there override
+	// config.yaml. godotenv does not overwrite vars already set in the real
+	// environment, so precedence is: real env > .env > config.yaml > defaults.
+	// A missing .env file is fine.
+	_ = godotenv.Load()
+
 	v := viper.New()
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")

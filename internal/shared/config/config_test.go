@@ -15,6 +15,19 @@ func TestDSN_EscapesSpecialChars(t *testing.T) {
 	}
 }
 
+func TestEnvOverridesYAML(t *testing.T) {
+	// A real APP_* env var (also how a loaded .env value arrives) must override
+	// config.yaml. Without this, .env values were silently ignored.
+	t.Setenv("APP_DB_PASSWORD", "from_env")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DB.Password != "from_env" {
+		t.Errorf("DB.Password = %q, want from_env (env should beat config.yaml)", cfg.DB.Password)
+	}
+}
+
 func TestValidate_RequiresKeyPaths(t *testing.T) {
 	// missing key paths fail
 	missing := &Config{DB: DBConfig{Host: "db"}}
