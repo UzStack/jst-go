@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/example/goapp/internal/shared/database"
-	sqlcdb "github.com/example/goapp/internal/shared/database/sqlc"
+	"github.com/UzStack/jst-go/internal/shared/database"
+	sqlcdb "github.com/UzStack/jst-go/internal/shared/database/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -67,6 +67,46 @@ func (r *pgRepo) UpdateName(ctx context.Context, id uuid.UUID, name string) (*Us
 	return mapOne(row, err)
 }
 
+func (r *pgRepo) UpdateRole(ctx context.Context, id uuid.UUID, role string) (*User, error) {
+	row, err := r.queries.UpdateUserRole(ctx, sqlcdb.UpdateUserRoleParams{
+		ID:   id,
+		Role: role,
+	})
+	return mapOne(row, err)
+}
+
+func (r *pgRepo) List(ctx context.Context, f ListFilter) ([]User, error) {
+	var search *string
+	if f.Search != "" {
+		search = &f.Search
+	}
+	rows, err := r.queries.ListUsers(ctx, sqlcdb.ListUsersParams{
+		Search: search,
+		Limit:  f.Limit,
+		Offset: f.Offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	out := make([]User, len(rows))
+	for i, row := range rows {
+		out[i] = fromSQLC(row)
+	}
+	return out, nil
+}
+
+func (r *pgRepo) Count(ctx context.Context, search string) (int64, error) {
+	var s *string
+	if search != "" {
+		s = &search
+	}
+	n, err := r.queries.CountUsers(ctx, s)
+	if err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return n, nil
+}
+
 func (r *pgRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	rows, err := r.queries.DeleteUser(ctx, id)
 	if err != nil {
@@ -95,6 +135,7 @@ func fromSQLC(r sqlcdb.User) User {
 		Email:        r.Email,
 		Name:         r.Name,
 		PasswordHash: r.PasswordHash,
+		Role:         r.Role,
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
 	}

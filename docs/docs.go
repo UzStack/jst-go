@@ -11,9 +11,8 @@ const docTemplate = `{
         "title": "{{.Title}}",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
-            "name": "JscorpTech",
-            "url": "https://github.com/JscorpTech/jst-go",
-            "email": "admin@jscorp.uz"
+            "name": "UzStack",
+            "url": "https://github.com/UzStack/jst-go"
         },
         "license": {
             "name": "MIT"
@@ -57,19 +56,53 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "description": "Revokes the supplied refresh token so it can no longer be used.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Logout",
+                "parameters": [
+                    {
+                        "description": "Refresh token to revoke",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_auth.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -109,19 +142,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -161,19 +194,76 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a paginated, filterable list of users. Admin only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "List users (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by email or name",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Rows to skip (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_user.ListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -204,13 +294,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -233,13 +323,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -282,19 +372,141 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse"
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns any user's profile by id. Admin only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get user by id (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_user.UserResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/role": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes a user's role. Admin only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Set user role (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New role",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_user.SetRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_user.UserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -302,7 +514,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_example_goapp_internal_shared_httpx.ErrorBody": {
+        "github_com_UzStack_jst-go_internal_shared_httpx.ErrorBody": {
             "type": "object",
             "properties": {
                 "code": {
@@ -317,11 +529,11 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_example_goapp_internal_shared_httpx.ErrorResponse": {
+        "github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
-                    "$ref": "#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorBody"
+                    "$ref": "#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorBody"
                 }
             }
         },
@@ -368,8 +580,9 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "password": {
+                    "description": "bcrypt silently truncates beyond 72 bytes",
                     "type": "string",
-                    "maxLength": 128,
+                    "maxLength": 72,
                     "minLength": 8
                 }
             }
@@ -391,6 +604,41 @@ const docTemplate = `{
                 },
                 "token_type": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_user.ListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_user.UserResponse"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_user.SetRoleRequest": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "admin"
+                    ]
                 }
             }
         },
@@ -420,6 +668,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "role": {
                     "type": "string"
                 },
                 "updated_at": {

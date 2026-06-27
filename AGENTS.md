@@ -6,7 +6,7 @@ Bu fayl AI agentlar (Claude Code, Cursor, Copilot, Codex va boshqalar) uchun. Lo
 
 **jst-go** — production-tayyor Go template, **feature-modular clean architecture** asosida. Stack: `gin + pgx + sqlc + golang-migrate + viper + zap`. Maqsadi: kichik loyihada overkill bo'lmaslik, lekin katta loyihada o'sa olish.
 
-Module nomi: `github.com/example/goapp` (yangi loyihada o'zingiznikiga almashtiriladi).
+Module nomi: `github.com/UzStack/jst-go` (yangi loyihada o'zingiznikiga almashtiriladi).
 
 ## 2. Direktoriya strukturasi — qoida
 
@@ -591,7 +591,7 @@ make up / down         # to'liq docker stack
 
 ## 15. Agent uchun maxsus eslatmalar
 
-- **Module nomi**: yangi loyihada `github.com/example/goapp` o'rniga real nom turishi kerak. Refactor paytida tekshiring.
+- **Module nomi**: yangi loyihada `github.com/UzStack/jst-go` o'rniga real nom turishi kerak. Refactor paytida tekshiring.
 - **DO NOT** `vendor/` papkasini commit qiling — `.gitignore`'da bor.
 - **DO NOT** `.env` ni commit qiling — faqat `.env.example`.
 - **DO NOT** generated sqlc kodini qo'lda tahrirla.

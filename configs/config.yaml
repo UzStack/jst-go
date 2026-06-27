@@ -7,6 +7,13 @@ http:
   write_timeout: 15s
   idle_timeout: 60s
   shutdown_timeout: 10s
+  request_timeout: 30s # per-request context deadline (0 disables)
+  max_header_bytes: 1048576 # 1 MiB
+  max_body_bytes: 1048576   # 1 MiB request body cap
+  cors_origins:
+    - "*"
+  rate_limit_rps: 0   # per-IP req/sec; 0 disables
+  rate_limit_burst: 20
 
 db:
   host: localhost
@@ -19,6 +26,7 @@ db:
   min_conns: 2
   max_conn_life: 30m
   migrations_path: file://migrations
+  auto_migrate: true # run pending migrations on startup (disable in prod, use CLI)
 
 jwt:
   secret: change-me-in-production

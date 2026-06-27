@@ -11,11 +11,19 @@ import (
 )
 
 type Querier interface {
+	CountUsers(ctx context.Context, search *string) (int64, error)
+	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	GetRefreshToken(ctx context.Context, id uuid.UUID) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+	RevokeRefreshToken(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateUserName(ctx context.Context, arg UpdateUserNameParams) (User, error)
+	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

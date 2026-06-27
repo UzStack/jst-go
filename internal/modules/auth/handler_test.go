@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/goapp/internal/modules/auth"
-	"github.com/example/goapp/internal/modules/user"
-	"github.com/example/goapp/internal/shared/config"
-	"github.com/example/goapp/internal/shared/database"
-	"github.com/example/goapp/internal/shared/httpx"
+	"github.com/UzStack/jst-go/internal/modules/auth"
+	"github.com/UzStack/jst-go/internal/modules/user"
+	"github.com/UzStack/jst-go/internal/shared/config"
+	"github.com/UzStack/jst-go/internal/shared/database"
+	"github.com/UzStack/jst-go/internal/shared/httpx"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -61,6 +61,14 @@ func (r *fakeUserRepo) UpdateName(_ context.Context, id uuid.UUID, name string) 
 	u.Name = name
 	return u, nil
 }
+func (r *fakeUserRepo) UpdateRole(_ context.Context, id uuid.UUID, role string) (*user.User, error) {
+	u, ok := r.byID[id]
+	if !ok {
+		return nil, database.ErrNotFound
+	}
+	u.Role = role
+	return u, nil
+}
 func (r *fakeUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 	u, ok := r.byID[id]
 	if !ok {
@@ -70,6 +78,38 @@ func (r *fakeUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.byEmail, u.Email)
 	return nil
 }
+func (r *fakeUserRepo) List(_ context.Context, _ user.ListFilter) ([]user.User, error) {
+	out := make([]user.User, 0, len(r.byID))
+	for _, u := range r.byID {
+		out = append(out, *u)
+	}
+	return out, nil
+}
+func (r *fakeUserRepo) Count(_ context.Context, _ string) (int64, error) {
+	return int64(len(r.byID)), nil
+}
+
+// fakeStore is an in-memory auth.RefreshStore for handler tests.
+type fakeStore struct {
+	revoked map[uuid.UUID]bool
+	known   map[uuid.UUID]bool
+}
+
+func newFakeStore() *fakeStore {
+	return &fakeStore{revoked: map[uuid.UUID]bool{}, known: map[uuid.UUID]bool{}}
+}
+func (s *fakeStore) Save(_ context.Context, jti, _ uuid.UUID, _ time.Time) error {
+	s.known[jti] = true
+	return nil
+}
+func (s *fakeStore) IsActive(_ context.Context, jti uuid.UUID) (bool, error) {
+	return s.known[jti] && !s.revoked[jti], nil
+}
+func (s *fakeStore) Revoke(_ context.Context, jti uuid.UUID) error {
+	s.revoked[jti] = true
+	return nil
+}
+func (s *fakeStore) RevokeAllForUser(_ context.Context, _ uuid.UUID) error { return nil }
 
 func newTestServer(t *testing.T) (*gin.Engine, *auth.Handler) {
 	t.Helper()
@@ -83,7 +123,7 @@ func newTestServer(t *testing.T) (*gin.Engine, *auth.Handler) {
 		RefreshTTL: 24 * time.Hour,
 		Issuer:     "goapp-test",
 	})
-	authUC := auth.NewUsecase(uc, tokens)
+	authUC := auth.NewUsecase(uc, tokens, newFakeStore())
 	h := auth.NewHandler(authUC)
 
 	r := gin.New()
@@ -225,5 +265,48 @@ func TestRefresh_InvalidToken(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401; body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestRefresh_RotationRevokesOld verifies a refresh token cannot be replayed
+// after it has been used once (rotation).
+func TestRefresh_RotationRevokesOld(t *testing.T) {
+	r, _ := newTestServer(t)
+
+	wReg := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", auth.RegisterRequest{
+		Email: "eve@example.com", Name: "Eve", Password: "correctpassword",
+	})
+	var tokens auth.TokenResponse
+	_ = json.Unmarshal(wReg.Body.Bytes(), &tokens)
+
+	// first use succeeds
+	w1 := doJSON(t, r, http.MethodPost, "/api/v1/auth/refresh", auth.RefreshRequest{RefreshToken: tokens.RefreshToken})
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first refresh = %d, want 200", w1.Code)
+	}
+	// replaying the same (now revoked) token fails
+	w2 := doJSON(t, r, http.MethodPost, "/api/v1/auth/refresh", auth.RefreshRequest{RefreshToken: tokens.RefreshToken})
+	if w2.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed refresh = %d, want 401; body=%s", w2.Code, w2.Body.String())
+	}
+}
+
+func TestLogout_RevokesToken(t *testing.T) {
+	r, _ := newTestServer(t)
+
+	wReg := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", auth.RegisterRequest{
+		Email: "frank@example.com", Name: "Frank", Password: "correctpassword",
+	})
+	var tokens auth.TokenResponse
+	_ = json.Unmarshal(wReg.Body.Bytes(), &tokens)
+
+	wOut := doJSON(t, r, http.MethodPost, "/api/v1/auth/logout", auth.RefreshRequest{RefreshToken: tokens.RefreshToken})
+	if wOut.Code != http.StatusNoContent {
+		t.Fatalf("logout = %d, want 204; body=%s", wOut.Code, wOut.Body.String())
+	}
+	// token is now unusable
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/refresh", auth.RefreshRequest{RefreshToken: tokens.RefreshToken})
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh after logout = %d, want 401", w.Code)
 	}
 }

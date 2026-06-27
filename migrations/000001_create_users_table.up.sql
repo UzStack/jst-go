@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+-- The UNIQUE constraint on email already creates an index; no extra one needed.

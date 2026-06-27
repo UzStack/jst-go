@@ -34,6 +34,10 @@ tidy: ## go mod tidy
 test: ## Run tests with race detector
 	go test -race -count=1 $(PKG)
 
+.PHONY: test-integration
+test-integration: ## Run integration tests (requires Docker)
+	go test -race -count=1 -tags integration $(PKG)
+
 .PHONY: cover
 cover: ## Test coverage report
 	go test -race -coverprofile=coverage.out $(PKG)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/goapp/internal/shared/config"
+	"github.com/UzStack/jst-go/internal/shared/config"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -23,6 +23,7 @@ func NewTokenIssuer(cfg config.JWTConfig) *TokenIssuer {
 type Claims struct {
 	jwt.RegisteredClaims
 	TokenType string `json:"typ"`
+	Role      string `json:"role,omitempty"`
 }
 
 const (
@@ -30,43 +31,64 @@ const (
 	typeRefresh = "refresh"
 )
 
-func (t *TokenIssuer) NewAccessToken(userID uuid.UUID) (string, time.Time, error) {
-	return t.sign(userID, typeAccess, t.cfg.AccessTTL)
+// NewAccessToken issues a short-lived access token carrying the user's role.
+func (t *TokenIssuer) NewAccessToken(userID uuid.UUID, role string) (string, time.Time, error) {
+	signed, _, exp, err := t.sign(userID, typeAccess, role, t.cfg.AccessTTL)
+	return signed, exp, err
 }
 
-func (t *TokenIssuer) NewRefreshToken(userID uuid.UUID) (string, time.Time, error) {
-	return t.sign(userID, typeRefresh, t.cfg.RefreshTTL)
+// NewRefreshToken issues a refresh token and returns its jti so the caller can
+// persist it for revocation/rotation.
+func (t *TokenIssuer) NewRefreshToken(userID uuid.UUID) (token string, jti uuid.UUID, exp time.Time, err error) {
+	return t.sign(userID, typeRefresh, "", t.cfg.RefreshTTL)
 }
 
-func (t *TokenIssuer) sign(userID uuid.UUID, kind string, ttl time.Duration) (string, time.Time, error) {
+func (t *TokenIssuer) sign(userID uuid.UUID, kind, role string, ttl time.Duration) (string, uuid.UUID, time.Time, error) {
 	expiresAt := time.Now().Add(ttl)
+	jti := uuid.New()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti.String(),
 			Subject:   userID.String(),
 			Issuer:    t.cfg.Issuer,
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 		TokenType: kind,
+		Role:      role,
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := tok.SignedString([]byte(t.cfg.Secret))
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("sign token: %w", err)
+		return "", uuid.Nil, time.Time{}, fmt.Errorf("sign token: %w", err)
 	}
-	return signed, expiresAt, nil
+	return signed, jti, expiresAt, nil
 }
 
-// VerifyAccessToken implements middleware.TokenVerifier.
-func (t *TokenIssuer) VerifyAccessToken(token string) (string, error) {
-	return t.verify(token, typeAccess)
+// VerifyAccessToken implements middleware.TokenVerifier, returning the user id
+// and role encoded in the token.
+func (t *TokenIssuer) VerifyAccessToken(token string) (userID, role string, err error) {
+	claims, err := t.verify(token, typeAccess)
+	if err != nil {
+		return "", "", err
+	}
+	return claims.Subject, claims.Role, nil
 }
 
-func (t *TokenIssuer) VerifyRefreshToken(token string) (string, error) {
-	return t.verify(token, typeRefresh)
+// VerifyRefreshToken returns the user id and jti of a valid refresh token.
+func (t *TokenIssuer) VerifyRefreshToken(token string) (userID string, jti uuid.UUID, err error) {
+	claims, err := t.verify(token, typeRefresh)
+	if err != nil {
+		return "", uuid.Nil, err
+	}
+	id, err := uuid.Parse(claims.ID)
+	if err != nil {
+		return "", uuid.Nil, errors.New("missing token id")
+	}
+	return claims.Subject, id, nil
 }
 
-func (t *TokenIssuer) verify(token, expectedType string) (string, error) {
+func (t *TokenIssuer) verify(token, expectedType string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(tk *jwt.Token) (any, error) {
 		if _, ok := tk.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", tk.Header["alg"])
@@ -74,17 +96,17 @@ func (t *TokenIssuer) verify(token, expectedType string) (string, error) {
 		return []byte(t.cfg.Secret), nil
 	}, jwt.WithIssuer(t.cfg.Issuer), jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	claims, ok := parsed.Claims.(*Claims)
 	if !ok || !parsed.Valid {
-		return "", errors.New("invalid token")
+		return nil, errors.New("invalid token")
 	}
 	if claims.TokenType != expectedType {
-		return "", errors.New("wrong token type")
+		return nil, errors.New("wrong token type")
 	}
 	if claims.Subject == "" {
-		return "", errors.New("missing subject")
+		return nil, errors.New("missing subject")
 	}
-	return claims.Subject, nil
+	return claims, nil
 }

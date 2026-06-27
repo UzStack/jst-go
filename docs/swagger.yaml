@@ -1,6 +1,6 @@
 basePath: /api/v1
 definitions:
-  github_com_example_goapp_internal_shared_httpx.ErrorBody:
+  github_com_UzStack_jst-go_internal_shared_httpx.ErrorBody:
     properties:
       code:
         type: string
@@ -10,10 +10,10 @@ definitions:
       message:
         type: string
     type: object
-  github_com_example_goapp_internal_shared_httpx.ErrorResponse:
+  github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse:
     properties:
       error:
-        $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorBody'
+        $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorBody'
     type: object
   internal_modules_auth.LoginRequest:
     properties:
@@ -41,7 +41,8 @@ definitions:
         minLength: 1
         type: string
       password:
-        maxLength: 128
+        description: bcrypt silently truncates beyond 72 bytes
+        maxLength: 72
         minLength: 8
         type: string
     required:
@@ -62,6 +63,29 @@ definitions:
       token_type:
         type: string
     type: object
+  internal_modules_user.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_user.UserResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_user.SetRoleRequest:
+    properties:
+      role:
+        enum:
+        - user
+        - admin
+        type: string
+    required:
+    - role
+    type: object
   internal_modules_user.UpdateMeRequest:
     properties:
       name:
@@ -81,15 +105,16 @@ definitions:
         type: string
       name:
         type: string
+      role:
+        type: string
       updated_at:
         type: string
     type: object
 host: localhost:8080
 info:
   contact:
-    email: admin@jscorp.uz
-    name: JscorpTech
-    url: https://github.com/JscorpTech/jst-go
+    name: UzStack
+    url: https://github.com/UzStack/jst-go
   description: Go clean architecture template — gin + pgx + sqlc + JWT auth.
   license:
     name: MIT
@@ -119,16 +144,38 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
       summary: Login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Revokes the supplied refresh token so it can no longer be used.
+      parameters:
+      - description: Refresh token to revoke
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.RefreshRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+      summary: Logout
       tags:
       - auth
   /auth/refresh:
@@ -153,15 +200,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
       summary: Refresh access token
       tags:
       - auth
@@ -187,18 +234,132 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
       summary: Register a new user
       tags:
       - auth
+  /users:
+    get:
+      description: Returns a paginated, filterable list of users. Admin only.
+      parameters:
+      - description: Filter by email or name
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.ListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List users (admin)
+      tags:
+      - users
+  /users/{id}:
+    get:
+      description: Returns any user's profile by id. Admin only.
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user by id (admin)
+      tags:
+      - users
+  /users/{id}/role:
+    patch:
+      consumes:
+      - application/json
+      description: Changes a user's role. Admin only.
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_user.SetRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set user role (admin)
+      tags:
+      - users
   /users/me:
     delete:
       description: Permanently deletes the authenticated user.
@@ -208,11 +369,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete current user
@@ -230,11 +391,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get current user
@@ -261,15 +422,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_example_goapp_internal_shared_httpx.ErrorResponse'
+            $ref: '#/definitions/github_com_UzStack_jst-go_internal_shared_httpx.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update current user

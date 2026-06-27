@@ -18,9 +18,9 @@ Production-tayyor Go template. Kichik loyihalarda overkill emas, kattalarida esa
 ## Tezkor start
 
 ```bash
-# 1. Module nomini o'zgartiring (default github.com/example/goapp)
+# 1. Module nomini o'zgartiring (default github.com/UzStack/jst-go)
 # go.mod va barcha importlarni replace qiling, masalan:
-#   find . -type f -name '*.go' -exec sed -i '' 's|github.com/example/goapp|github.com/youruser/yourproject|g' {} +
+#   find . -type f -name '*.go' -exec sed -i '' 's|github.com/UzStack/jst-go|github.com/youruser/yourproject|g' {} +
 #   go mod edit -module github.com/youruser/yourproject
 
 # 2. Dev toollar
@@ -67,7 +67,29 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 # Me (access token bilan)
 curl http://localhost:8080/api/v1/users/me \
   -H 'Authorization: Bearer <ACCESS_TOKEN>'
+
+# Refresh (rotation — eski token bekor qilinadi)
+curl -X POST http://localhost:8080/api/v1/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"refresh_token":"<REFRESH_TOKEN>"}'
+
+# Logout (refresh tokenni revoke qiladi)
+curl -X POST http://localhost:8080/api/v1/auth/logout \
+  -H 'Content-Type: application/json' \
+  -d '{"refresh_token":"<REFRESH_TOKEN>"}'
+
+# Admin: userlar ro'yxati (filter + pagination)
+curl 'http://localhost:8080/api/v1/users?search=ali&limit=20&offset=0' \
+  -H 'Authorization: Bearer <ADMIN_ACCESS_TOKEN>'
+
+# Admin: rol o'zgartirish
+curl -X PATCH http://localhost:8080/api/v1/users/<USER_ID>/role \
+  -H 'Authorization: Bearer <ADMIN_ACCESS_TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"role":"admin"}'
 ```
+
+> **Rollar (RBAC):** har user `role` ustuniga ega (default `user`). Access token ichida `role` claim bo'ladi; `middleware.RequireRole("admin")` admin-only endpointlarni himoya qiladi. Birinchi adminni DB orqali bering: `UPDATE users SET role='admin' WHERE email='...';`
 
 ## Yangi modul qo'shish
 
@@ -103,7 +125,7 @@ Keyin `repository.go` ichidagi pgx kodini sqlc generated wrapperga almashtiring.
 - Pastga: `make migrate-down`
 - Versiyani majburlash (xato holatda): `make migrate-force V=2`
 
-Migrate library startda avtomatik chaqiriladi (`MigrateUp`), shu sababli local dev'da alohida buyruq kerak emas. Production deploylarda buni o'chirib, alohida migration job ishlatsangiz xavfsizroq — `cmd/api/main.go`'dagi `MigrateUp` chaqiruvini olib tashlang.
+Migrate library startda avtomatik chaqiriladi (`MigrateUp`), shu sababli local dev'da alohida buyruq kerak emas. Production deploylarda `APP_DB_AUTO_MIGRATE=false` qo'ying va migrationlarni alohida job/CLI orqali (`make migrate-up`) boshqaring — multi-replica deploylarda shu xavfsizroq.
 
 ## Konfiguratsiya
 
@@ -118,13 +140,17 @@ APP_LOG_LEVEL=info
 
 ## Testlash
 
-- **Unit**: `internal/modules/user/usecase_test.go` — fakeRepo bilan.
-- **Integration**: production'da [testcontainers-go](https://github.com/testcontainers/testcontainers-go) bilan real postgres ko'tarib `*pgxpool.Pool`'ga `NewPostgresRepository`'ni qo'llang.
+- **Unit**: `internal/modules/user/usecase_test.go`, `internal/modules/auth/handler_test.go` — fake repo/store bilan (Docker kerak emas).
+- **Integration**: `internal/modules/user/repository_integration_test.go` — [testcontainers-go](https://github.com/testcontainers/testcontainers-go) bilan real Postgres ko'taradi. `//go:build integration` tegi ostida, Docker talab qiladi.
 
 ```bash
-make test        # race detector bilan
-make cover       # coverage.html
+make test              # unit testlar (race detector)
+make test-integration  # integration testlar (Docker kerak)
+make cover             # coverage.html
 ```
+
+> Colima/OrbStack kabi nostandart Docker socket ishlatsangiz `DOCKER_HOST` ni o'rnating, masalan:
+> `export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock`
 
 ## Struktura
 
@@ -153,13 +179,23 @@ make cover       # coverage.html
 └── .air.toml
 ```
 
+## Xavfsizlik & operatsion eslatmalar
+
+- **JWT secret** — `APP_ENV=production`da `APP_JWT_SECRET` 32+ baytli bo'lishi shart va `change-me` so'zini o'z ichiga olmasligi kerak, aks holda startup'da `config.validate()` xato beradi.
+- **Refresh token revocation + rotation** — refresh tokenlar `jti` bo'yicha `refresh_tokens` jadvalida saqlanadi. `Refresh` har chaqirilganda eski token revoke qilinadi (rotation — replay himoyasi), `/auth/logout` esa tokenni darhol bekor qiladi. Access tokenlar stateless (15m), shuning uchun rol o'zgarishi keyingi refreshda kuchga kiradi. Eskirgan tokenlarni tozalash uchun `DeleteExpiredRefreshTokens` queryni cron/job'da ishlating.
+- **Rate limiting** — `APP_HTTP_RATE_LIMIT_RPS` orqali per-IP token bucket (0 = o'chiq). Bu **instance-local** — bir nechta replica orqasida har biri alohida cheklaydi; global limit kerak bo'lsa Redis'ga ko'chiring.
+- **CORS** — `APP_HTTP_CORS_ORIGINS` (default `*`). Production'da aniq originlar yozing.
+- **Body limit** — `APP_HTTP_MAX_BODY_BYTES` (default 1 MiB) so'rov tanasini cheklaydi; `MaxHeaderBytes` ham qo'yilgan.
+- **Health/Readiness** — `/healthz` (liveness, DB'ga tegmaydi) va `/readyz` (DB ping). k8s probe'lari uchun `/readyz` ishlating.
+
 ## Production checklist
 
-- [ ] `APP_JWT_SECRET` 32+ baytli random qiymat.
-- [ ] `APP_ENV=production` (gin release mode, slog-friendly).
-- [ ] Migration startup-da emas, alohida job/init container'da.
+- [ ] `APP_JWT_SECRET` 32+ baytli random qiymat (`openssl rand -hex 32`).
+- [ ] `APP_ENV=production` (gin release mode).
+- [ ] `APP_DB_AUTO_MIGRATE=false` + migration alohida job/init container'da.
+- [ ] `APP_HTTP_CORS_ORIGINS` aniq originlarga cheklangan.
+- [ ] `APP_HTTP_RATE_LIMIT_RPS` o'rnatilgan (yoki tashqi WAF/proxy'da).
 - [ ] HTTPS reverse proxy (nginx/caddy/traefik) orqasida.
-- [ ] DB credentialslar secret manager'da.
+- [ ] DB credentiallar secret manager'da.
+- [ ] k8s liveness=`/healthz`, readiness=`/readyz`.
 - [ ] OpenTelemetry/Prometheus tracing — kerak bo'lganda `internal/shared/middleware/`ga qo'shing.
-- [ ] Rate limiting middleware.
-- [ ] `httpServer.TLSConfig` agar to'g'ridan-to'g'ri TLS terminate qilsa.

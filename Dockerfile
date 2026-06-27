@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /src
 
@@ -8,12 +8,17 @@ RUN go mod download
 
 COPY . .
 
+# Build version injected into buildinfo.Version (pass --build-arg VERSION=...).
+ARG VERSION=dev
+
 # CGO disabled for static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w -X github.com/UzStack/jst-go/internal/shared/buildinfo.Version=${VERSION}" \
+    -o /out/api ./cmd/api
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata && \
+RUN apk add --no-cache ca-certificates tzdata wget && \
     addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
@@ -25,4 +30,8 @@ COPY --chown=app:app migrations ./migrations
 USER app
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost:8080/healthz || exit 1
+
 ENTRYPOINT ["/app/api"]

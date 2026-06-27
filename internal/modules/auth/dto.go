@@ -5,7 +5,7 @@ import "time"
 type RegisterRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 	Name     string `json:"name" validate:"required,min=1,max=100"`
-	Password string `json:"password" validate:"required,min=8,max=128"`
+	Password string `json:"password" validate:"required,min=8,max=72"` // bcrypt silently truncates beyond 72 bytes
 }
 
 type LoginRequest struct {

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/example/goapp/internal/modules/user"
-	"github.com/example/goapp/internal/shared/database"
-	"github.com/example/goapp/internal/shared/httpx"
+	"github.com/UzStack/jst-go/internal/modules/user"
+	"github.com/UzStack/jst-go/internal/shared/database"
+	"github.com/UzStack/jst-go/internal/shared/httpx"
 	"github.com/google/uuid"
 )
 
@@ -60,6 +60,15 @@ func (r *fakeRepo) UpdateName(_ context.Context, id uuid.UUID, name string) (*us
 	return u, nil
 }
 
+func (r *fakeRepo) UpdateRole(_ context.Context, id uuid.UUID, role string) (*user.User, error) {
+	u, ok := r.byID[id]
+	if !ok {
+		return nil, database.ErrNotFound
+	}
+	u.Role = role
+	return u, nil
+}
+
 func (r *fakeRepo) Delete(_ context.Context, id uuid.UUID) error {
 	u, ok := r.byID[id]
 	if !ok {
@@ -68,6 +77,18 @@ func (r *fakeRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.byID, id)
 	delete(r.byEmail, u.Email)
 	return nil
+}
+
+func (r *fakeRepo) List(_ context.Context, f user.ListFilter) ([]user.User, error) {
+	out := make([]user.User, 0, len(r.byID))
+	for _, u := range r.byID {
+		out = append(out, *u)
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) Count(_ context.Context, _ string) (int64, error) {
+	return int64(len(r.byID)), nil
 }
 
 func TestRegister_AndAuthenticate(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/example/goapp/internal/shared/database"
-	"github.com/example/goapp/internal/shared/httpx"
+	"github.com/UzStack/jst-go/internal/shared/database"
+	"github.com/UzStack/jst-go/internal/shared/httpx"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -21,7 +21,9 @@ type Usecase interface {
 	Authenticate(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	UpdateName(ctx context.Context, id uuid.UUID, name string) (*User, error)
+	SetRole(ctx context.Context, id uuid.UUID, role string) (*User, error)
 	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, f ListFilter) ([]User, int64, error)
 }
 
 type RegisterInput struct {
@@ -94,6 +96,39 @@ func (u *usecase) UpdateName(ctx context.Context, id uuid.UUID, name string) (*U
 		return nil, httpx.Internal(err)
 	}
 	return user, nil
+}
+
+func (u *usecase) SetRole(ctx context.Context, id uuid.UUID, role string) (*User, error) {
+	if role != RoleUser && role != RoleAdmin {
+		return nil, httpx.BadRequest("user.invalid_role", "role must be 'user' or 'admin'")
+	}
+	user, err := u.repo.UpdateRole(ctx, id, role)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, httpx.NotFound("user.not_found", "user not found")
+		}
+		return nil, httpx.Internal(err)
+	}
+	return user, nil
+}
+
+// List returns a page of users plus the total count matching the filter.
+func (u *usecase) List(ctx context.Context, f ListFilter) ([]User, int64, error) {
+	if f.Limit <= 0 || f.Limit > 100 {
+		f.Limit = 20
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+	users, err := u.repo.List(ctx, f)
+	if err != nil {
+		return nil, 0, httpx.Internal(err)
+	}
+	total, err := u.repo.Count(ctx, f.Search)
+	if err != nil {
+		return nil, 0, httpx.Internal(err)
+	}
+	return users, total, nil
 }
 
 func (u *usecase) Delete(ctx context.Context, id uuid.UUID) error {

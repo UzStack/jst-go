@@ -52,6 +52,10 @@ func Conflict(code, msg string) *AppError {
 	return &AppError{Code: code, Message: msg, Status: http.StatusConflict}
 }
 
+func TooManyRequests(code, msg string) *AppError {
+	return &AppError{Code: code, Message: msg, Status: http.StatusTooManyRequests}
+}
+
 func Internal(err error) *AppError {
 	return &AppError{
 		Code:    "internal.error",
@@ -61,12 +65,13 @@ func Internal(err error) *AppError {
 	}
 }
 
-// Wrap attaches an underlying error to an existing AppError without losing
-// the original public message/code.
+// Wrap attaches an underlying error to an AppError, returning a copy so a
+// shared/package-level AppError value is never mutated.
 func Wrap(ae *AppError, err error) *AppError {
 	if ae == nil {
 		return Internal(err)
 	}
-	ae.Err = err
-	return ae
+	cp := *ae
+	cp.Err = err
+	return &cp
 }

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/example/goapp/internal/shared/config"
+	"github.com/UzStack/jst-go/internal/shared/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

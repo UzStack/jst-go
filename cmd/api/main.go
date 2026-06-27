@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/example/goapp/docs"
-	"github.com/example/goapp/internal/server"
-	"github.com/example/goapp/internal/shared/config"
-	"github.com/example/goapp/internal/shared/database"
-	"github.com/example/goapp/internal/shared/logger"
+	_ "github.com/UzStack/jst-go/docs"
+	"github.com/UzStack/jst-go/internal/server"
+	"github.com/UzStack/jst-go/internal/shared/config"
+	"github.com/UzStack/jst-go/internal/shared/database"
+	"github.com/UzStack/jst-go/internal/shared/logger"
 )
 
 // @title           jst-go API
@@ -21,9 +21,8 @@ import (
 // @description     Go clean architecture template — gin + pgx + sqlc + JWT auth.
 // @termsOfService  http://swagger.io/terms/
 //
-// @contact.name   JscorpTech
-// @contact.url    https://github.com/JscorpTech/jst-go
-// @contact.email  admin@jscorp.uz
+// @contact.name   UzStack
+// @contact.url    https://github.com/UzStack/jst-go
 //
 // @license.name  MIT
 //
@@ -56,8 +55,12 @@ func main() {
 	}
 	defer pool.Close()
 
-	if err := database.MigrateUp(cfg.DB.MigrationsURL(), cfg.DB.MigrationsPath); err != nil {
-		log.Fatal("migration failed", logger.Err(err))
+	if cfg.DB.AutoMigrate {
+		if err := database.MigrateUp(cfg.DB.MigrationsURL(), cfg.DB.MigrationsPath); err != nil {
+			log.Fatal("migration failed", logger.Err(err))
+		}
+	} else {
+		log.Info("auto-migrate disabled; run migrations via CLI (make migrate-up)")
 	}
 
 	srv := server.New(cfg, log, pool)
@@ -69,6 +72,7 @@ func main() {
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
+		MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
 	}
 
 	serverErr := make(chan error, 1)

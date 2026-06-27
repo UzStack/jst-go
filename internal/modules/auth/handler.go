@@ -3,8 +3,8 @@ package auth
 import (
 	"net/http"
 
-	"github.com/example/goapp/internal/shared/httpx"
-	"github.com/example/goapp/internal/shared/validator"
+	"github.com/UzStack/jst-go/internal/shared/httpx"
+	"github.com/UzStack/jst-go/internal/shared/validator"
 	"github.com/gin-gonic/gin"
 )
 
@@ -104,4 +104,30 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, http.StatusOK, tokens)
+}
+
+// Logout godoc
+// @Summary      Logout
+// @Description  Revokes the supplied refresh token so it can no longer be used.
+// @Tags         auth
+// @Accept       json
+// @Param        body  body      RefreshRequest  true  "Refresh token to revoke"
+// @Success      204
+// @Failure      400   {object}  httpx.ErrorResponse
+// @Router       /auth/logout [post]
+func (h *Handler) Logout(c *gin.Context) {
+	var req RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
+		return
+	}
+	if details, err := validator.Struct(req); err != nil {
+		httpx.ErrorWithDetails(c, httpx.BadRequest("request.invalid", "validation failed"), details)
+		return
+	}
+	if err := h.uc.Logout(c.Request.Context(), req); err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.NoContent(c)
 }

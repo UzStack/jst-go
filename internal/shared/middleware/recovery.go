@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/example/goapp/internal/shared/httpx"
-	"github.com/example/goapp/internal/shared/logger"
+	"github.com/UzStack/jst-go/internal/shared/httpx"
+	"github.com/UzStack/jst-go/internal/shared/logger"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,6 +18,7 @@ func Recovery(log *logger.Logger) gin.HandlerFunc {
 			if r := recover(); r != nil {
 				err := fmt.Errorf("panic: %v", r)
 				log.Error("panic recovered",
+					logger.String("request_id", RequestIDOf(c)),
 					logger.Err(err),
 					logger.String("stack", string(debug.Stack())),
 				)
