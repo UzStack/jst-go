@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/UzStack/jst-go/internal/modules/auth"
 	"github.com/UzStack/jst-go/internal/modules/user"
 	"github.com/UzStack/jst-go/internal/shared/database"
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-func newPostgres(t *testing.T) *pgxpool.Pool {
+func newStore(t *testing.T) *database.Store {
 	t.Helper()
 	ctx := context.Background()
 
@@ -51,11 +52,11 @@ func newPostgres(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	return pool
+	return database.NewStore(pool)
 }
 
 func TestRepository_CRUD(t *testing.T) {
-	repo := user.NewPostgresRepository(newPostgres(t))
+	repo := user.NewPostgresRepository(newStore(t))
 	ctx := context.Background()
 
 	u := &user.User{ID: uuid.New(), Email: "a@b.com", Name: "A", PasswordHash: "x"}
@@ -102,5 +103,101 @@ func TestRepository_CRUD(t *testing.T) {
 	}
 	if _, err := repo.GetByID(ctx, u.ID); !errors.Is(err, database.ErrNotFound) {
 		t.Errorf("after delete err = %v, want ErrNotFound", err)
+	}
+}
+
+// The point of carrying the transaction in the context: two modules that know
+// nothing about each other write through one transaction, and one failure undoes
+// both. Neither repository is passed a tx — they find it on the ctx.
+func TestStore_DoRollsBackAcrossModules(t *testing.T) {
+	store := newStore(t)
+	users := user.NewPostgresRepository(store)
+	tokens := auth.NewRefreshStore(store)
+	ctx := context.Background()
+
+	u := &user.User{ID: uuid.New(), Email: "tx@b.com", Name: "TX", PasswordHash: "x"}
+	jti := uuid.New()
+
+	wantErr := errors.New("checkout failed")
+	err := store.Do(ctx, func(ctx context.Context) error {
+		if err := users.Create(ctx, u); err != nil {
+			return err
+		}
+		if err := tokens.Save(ctx, jti, u.ID, time.Now().Add(time.Hour)); err != nil {
+			return err
+		}
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Do err = %v, want %v", err, wantErr)
+	}
+
+	if _, err := users.GetByID(ctx, u.ID); !errors.Is(err, database.ErrNotFound) {
+		t.Errorf("user survived rollback: err = %v, want ErrNotFound", err)
+	}
+	if active, err := tokens.IsActive(ctx, jti); err != nil || active {
+		t.Errorf("refresh token survived rollback: active = %v, err = %v", active, err)
+	}
+}
+
+func TestStore_DoCommitsAcrossModules(t *testing.T) {
+	store := newStore(t)
+	users := user.NewPostgresRepository(store)
+	tokens := auth.NewRefreshStore(store)
+	ctx := context.Background()
+
+	u := &user.User{ID: uuid.New(), Email: "ok@b.com", Name: "OK", PasswordHash: "x"}
+	jti := uuid.New()
+
+	if err := store.Do(ctx, func(ctx context.Context) error {
+		if err := users.Create(ctx, u); err != nil {
+			return err
+		}
+		return tokens.Save(ctx, jti, u.ID, time.Now().Add(time.Hour))
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+
+	if _, err := users.GetByID(ctx, u.ID); err != nil {
+		t.Errorf("user not committed: %v", err)
+	}
+	if active, err := tokens.IsActive(ctx, jti); err != nil || !active {
+		t.Errorf("token not committed: active = %v, err = %v", active, err)
+	}
+}
+
+// A usecase that opens its own transaction must stay safe to call from a larger
+// one: the inner failure undoes only the inner work.
+func TestStore_NestedDoRollsBackToSavepoint(t *testing.T) {
+	store := newStore(t)
+	users := user.NewPostgresRepository(store)
+	ctx := context.Background()
+
+	outer := &user.User{ID: uuid.New(), Email: "outer@b.com", Name: "O", PasswordHash: "x"}
+	inner := &user.User{ID: uuid.New(), Email: "inner@b.com", Name: "I", PasswordHash: "x"}
+
+	if err := store.Do(ctx, func(ctx context.Context) error {
+		if err := users.Create(ctx, outer); err != nil {
+			return err
+		}
+		nestedErr := store.Do(ctx, func(ctx context.Context) error {
+			if err := users.Create(ctx, inner); err != nil {
+				return err
+			}
+			return errors.New("inner failed")
+		})
+		if nestedErr == nil {
+			t.Error("nested Do err = nil, want error")
+		}
+		return nil // outer swallows the inner failure and commits its own work
+	}); err != nil {
+		t.Fatalf("outer Do: %v", err)
+	}
+
+	if _, err := users.GetByID(ctx, outer.ID); err != nil {
+		t.Errorf("outer write lost: %v", err)
+	}
+	if _, err := users.GetByID(ctx, inner.ID); !errors.Is(err, database.ErrNotFound) {
+		t.Errorf("inner write survived savepoint rollback: err = %v", err)
 	}
 }

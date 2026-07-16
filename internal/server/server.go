@@ -10,6 +10,7 @@ import (
 	"github.com/UzStack/jst-go/internal/modules/ws"
 	"github.com/UzStack/jst-go/internal/shared/buildinfo"
 	"github.com/UzStack/jst-go/internal/shared/config"
+	"github.com/UzStack/jst-go/internal/shared/database"
 	"github.com/UzStack/jst-go/internal/shared/logger"
 	"github.com/UzStack/jst-go/internal/shared/middleware"
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,7 @@ import (
 type Server struct {
 	cfg    *config.Config
 	log    *logger.Logger
-	pool   *pgxpool.Pool
+	store  *database.Store
 	router *gin.Engine
 	tokens *auth.TokenIssuer
 }
@@ -53,7 +54,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 		middleware.Timeout(cfg.HTTP.RequestTimeout),
 	)
 
-	s := &Server{cfg: cfg, log: log, pool: pool, router: r, tokens: tokens}
+	s := &Server{cfg: cfg, log: log, store: database.NewStore(pool), router: r, tokens: tokens}
 	s.registerRoutes(ctx)
 	return s, nil
 }
@@ -69,7 +70,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// Readiness: dependencies are reachable. Pings the DB so an orchestrator
 	// stops routing traffic when Postgres is down.
 	s.router.GET("/readyz", func(c *gin.Context) {
-		if err := s.pool.Ping(c.Request.Context()); err != nil {
+		if err := s.store.Pool().Ping(c.Request.Context()); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "db": "down"})
 			return
 		}
@@ -84,12 +85,12 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	v1 := s.router.Group("/api/v1")
 
 	// user module
-	userRepo := user.NewPostgresRepository(s.pool)
+	userRepo := user.NewPostgresRepository(s.store)
 	userUC := user.NewUsecase(userRepo)
 
 	// auth module — depends on user usecase + jwt issuer + refresh store
 	tokens := s.tokens
-	refreshStore := auth.NewRefreshStore(s.pool)
+	refreshStore := auth.NewRefreshStore(s.store)
 	authUC := auth.NewUsecase(userUC, tokens, refreshStore)
 	auth.RegisterRoutes(v1, auth.NewHandler(authUC))
 

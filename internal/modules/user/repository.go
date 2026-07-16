@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // pgRepo wraps sqlc-generated queries. sqlc handles the SQL <-> Go mapping;
@@ -21,18 +20,26 @@ import (
 //
 // Keeping the persistence model (sqlcdb.User) out of the domain means the
 // usecase has no idea sqlc exists and stays trivially testable.
+//
+// The repo holds the Store rather than a bound *sqlcdb.Queries: queries are
+// built per call from Store.DB(ctx), so a call made inside store.Do runs in that
+// transaction — even one opened by a different module.
 type pgRepo struct {
-	queries *sqlcdb.Queries
+	store *database.Store
 }
 
-func NewPostgresRepository(pool *pgxpool.Pool) Repository {
-	return &pgRepo{queries: sqlcdb.New(pool)}
+func NewPostgresRepository(store *database.Store) Repository {
+	return &pgRepo{store: store}
+}
+
+func (r *pgRepo) q(ctx context.Context) *sqlcdb.Queries {
+	return sqlcdb.New(r.store.DB(ctx))
 }
 
 const uniqueViolation = "23505"
 
 func (r *pgRepo) Create(ctx context.Context, u *User) error {
-	row, err := r.queries.CreateUser(ctx, sqlcdb.CreateUserParams{
+	row, err := r.q(ctx).CreateUser(ctx, sqlcdb.CreateUserParams{
 		ID:           u.ID,
 		Email:        u.Email,
 		Name:         u.Name,
@@ -50,17 +57,17 @@ func (r *pgRepo) Create(ctx context.Context, u *User) error {
 }
 
 func (r *pgRepo) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
-	row, err := r.queries.GetUserByID(ctx, id)
+	row, err := r.q(ctx).GetUserByID(ctx, id)
 	return mapOne(row, err)
 }
 
 func (r *pgRepo) GetByEmail(ctx context.Context, email string) (*User, error) {
-	row, err := r.queries.GetUserByEmail(ctx, email)
+	row, err := r.q(ctx).GetUserByEmail(ctx, email)
 	return mapOne(row, err)
 }
 
 func (r *pgRepo) UpdateName(ctx context.Context, id uuid.UUID, name string) (*User, error) {
-	row, err := r.queries.UpdateUserName(ctx, sqlcdb.UpdateUserNameParams{
+	row, err := r.q(ctx).UpdateUserName(ctx, sqlcdb.UpdateUserNameParams{
 		ID:   id,
 		Name: name,
 	})
@@ -68,7 +75,7 @@ func (r *pgRepo) UpdateName(ctx context.Context, id uuid.UUID, name string) (*Us
 }
 
 func (r *pgRepo) UpdateRole(ctx context.Context, id uuid.UUID, role string) (*User, error) {
-	row, err := r.queries.UpdateUserRole(ctx, sqlcdb.UpdateUserRoleParams{
+	row, err := r.q(ctx).UpdateUserRole(ctx, sqlcdb.UpdateUserRoleParams{
 		ID:   id,
 		Role: role,
 	})
@@ -80,7 +87,7 @@ func (r *pgRepo) List(ctx context.Context, f ListFilter) ([]User, error) {
 	if f.Search != "" {
 		search = &f.Search
 	}
-	rows, err := r.queries.ListUsers(ctx, sqlcdb.ListUsersParams{
+	rows, err := r.q(ctx).ListUsers(ctx, sqlcdb.ListUsersParams{
 		Search: search,
 		Limit:  f.Limit,
 		Offset: f.Offset,
@@ -100,7 +107,7 @@ func (r *pgRepo) Count(ctx context.Context, search string) (int64, error) {
 	if search != "" {
 		s = &search
 	}
-	n, err := r.queries.CountUsers(ctx, s)
+	n, err := r.q(ctx).CountUsers(ctx, s)
 	if err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
@@ -108,7 +115,7 @@ func (r *pgRepo) Count(ctx context.Context, search string) (int64, error) {
 }
 
 func (r *pgRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	rows, err := r.queries.DeleteUser(ctx, id)
+	rows, err := r.q(ctx).DeleteUser(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}

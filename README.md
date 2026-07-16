@@ -146,7 +146,7 @@ O'zingizning routingingiz uchun `hub.go` dagi `handleInbound` ni o'zgartiring.
 5. `handler.go`, `dto.go`, `routes.go`.
 6. `internal/server/server.go` ichida wiring qo'sh:
    ```go
-   widgetRepo := widget.NewPostgresRepository(s.pool)
+   widgetRepo := widget.NewPostgresRepository(s.store)
    widgetUC := widget.NewUsecase(widgetRepo)
    widget.RegisterRoutes(v1, widget.NewHandler(widgetUC), tokens)
    ```

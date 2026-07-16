@@ -58,7 +58,7 @@ handler ──> usecase ──> domain (Repository interface)
 
 - **Usecase faqat interface'ga bog'lanadi** (`Repository`, `TokenVerifier`). Concrete tipga (`*pgRepo`) bog'lanmaydi.
 - **Domain (`domain.go`) hech narsaga bog'lanmaydi** — `database/sql`, `gin`, `zap`, `pgx` import qilmaydi.
-- **Repository concrete tipi** (`pgRepo`) — package'dan tashqariga **eksport qilinmaydi**. Faqat `NewPostgresRepository(pool) Repository` eksport qilinadi.
+- **Repository concrete tipi** (`pgRepo`) — package'dan tashqariga **eksport qilinmaydi**. Faqat `NewPostgresRepository(store) Repository` eksport qilinadi.
 
 ### 3.2 Modullararo bog'lanish
 
@@ -144,22 +144,66 @@ func fromSQLC(r sqlcdb.User) User {
 
 Identik bo'lsa ham — bu chegara muhim. Sxema o'zgarsa, domain shokga uchramaydi.
 
-### 4.6 Transaction
+### 4.6 Transaction — `database.Store`
 
-Pool'dan `Begin(ctx)` qil, sqlc'ning `WithTx(tx)` orqali queries ol:
+Tranzaksiya **context ichida** yuradi. Repository hech qachon `*sqlcdb.Queries`'ni
+konstruktorda bog'lab olmaydi — har chaqiruvda `store.DB(ctx)` dan oladi:
 
 ```go
-tx, err := r.pool.Begin(ctx)
-if err != nil { return err }
-defer tx.Rollback(ctx)  // commit bo'lsa noop
+type pgRepo struct {
+    store *database.Store
+}
 
-q := r.queries.WithTx(tx)
-if _, err := q.CreatePost(ctx, ...); err != nil { return err }
-if err := q.IncrementCount(ctx, userID); err != nil { return err }
-return tx.Commit(ctx)
+func NewPostgresRepository(store *database.Store) Repository {
+    return &pgRepo{store: store}
+}
+
+func (r *pgRepo) q(ctx context.Context) *sqlcdb.Queries {
+    return sqlcdb.New(r.store.DB(ctx))
+}
+
+func (r *pgRepo) Create(ctx context.Context, p *Post) error {
+    row, err := r.q(ctx).CreatePost(ctx, ...)
+    ...
+}
 ```
 
-Buning uchun `pgRepo` strukturasiga `pool *pgxpool.Pool` qaytaring.
+`store.DB(ctx)` ctx da tranzaksiya bo'lsa — o'shani, bo'lmasa pool'ni qaytaradi.
+Repository ikkalasining farqini bilmaydi.
+
+**Bir necha modulni bitta tranzaksiyaga qo'shish** — usecase `store.Do` ochadi,
+ichkaridagi hamma modul **o'sha ctx** ni oladi:
+
+```go
+func (u *usecase) Checkout(ctx context.Context, userID uuid.UUID) error {
+    return u.store.Do(ctx, func(ctx context.Context) error {
+        items, err := u.cart.Load(ctx, userID)      // ┐
+        if err != nil { return err }                //  │ hammasi bir xil ctx
+        if err := u.product.Reserve(ctx, items); err != nil { return err }
+        if err := u.order.Create(ctx, userID, items); err != nil { return err }
+        return u.wallet.Debit(ctx, userID, total(items))  // ┘
+    })
+}
+```
+
+Bitta xato — hammasi bekor, jumladan tranzaksiya haqida umuman bilmaydigan
+modullarning yozuvlari ham. Hech kim hech kimga `tx` uzatmaydi va hech kim uni
+"unutib qo'ya olmaydi": repository uchun bazaga `store.DB(ctx)` dan boshqa yo'l
+yo'q, u esa doim ctx ga qaraydi.
+
+**Qoidalar:**
+
+- `store.DB(ctx)` natijasini **struct'ga saqlama** — javob har chaqiruvda
+  boshqacha bo'lishi mumkin. Aynan shu xato bu dizayn yo'q qiladigan xato.
+- `store.Pool()` faqat query bo'lmagan ish uchun (health check, LISTEN/NOTIFY).
+  Query uchun ishlatsang, ctx dagi tranzaksiyani chetlab o'tib yozadi.
+- **Nested `Do` xavfsiz** — ichkaridagisi savepoint orqali tashqi tranzaksiyaga
+  qo'shiladi. Ya'ni o'z tranzaksiyasini ochadigan usecase'ni kattaroq
+  tranzaksiya ichidan chaqirsa bo'ladi.
+- `Do` ichida ctx ni **parallel goroutine'larga tarqatma** — `pgx.Tx` bitta
+  ulanishda ishlaydi va concurrent-safe emas.
+- `Do` fn nil qaytarsa commit, xato yoki panic bo'lsa rollback qiladi. Qo'lda
+  `Begin`/`Commit`/`Rollback` yozma.
 
 ## 5. Xatolar — AppError pattern
 
@@ -364,7 +408,7 @@ Misol uchun `post` moduli kerak bo'lsin:
 
 4. **Wiring** (`internal/server/server.go`):
    ```go
-   postRepo := post.NewPostgresRepository(s.pool)
+   postRepo := post.NewPostgresRepository(s.store)
    postUC := post.NewUsecase(postRepo)
    post.RegisterRoutes(v1, post.NewHandler(postUC), tokens)
    ```
@@ -480,7 +524,7 @@ Minimum **kamida happy path + 1 ta xato holat** har endpoint uchun.
 
 ### 9.5 Integration test (repository)
 
-[testcontainers-go](https://github.com/testcontainers/testcontainers-go) bilan real postgres ko'tarib `*pgxpool.Pool` ga `NewPostgresRepository`'ni qo'llang. **Mock DB ishlatma** — sxema xatolari prod'da paydo bo'ladi.
+[testcontainers-go](https://github.com/testcontainers/testcontainers-go) bilan real postgres ko'tarib, pool'ni `database.NewStore` ga o'rab `NewPostgresRepository`'ga bering. **Mock DB ishlatma** — sxema xatolari prod'da paydo bo'ladi.
 
 ```go
 func setupDB(t *testing.T) *pgxpool.Pool {
@@ -559,7 +603,7 @@ Pull request oldidan **`make test` muvaffaqiyatli o'tishi shart**. CI'da ham shu
 - **Receiver name**: `func (r *pgRepo) ...` — 1-3 harf, tip nomidan kelib chiqsin.
 - **Error tekshiruvi**: `if err != nil { return ... }` — har doim ketma-ket, nested emas.
 - **Context har doim birinchi parametr**: `func Do(ctx context.Context, ...)`.
-- **defer ishlatish** resource cleanup uchun (`defer pool.Close()`, `defer tx.Rollback(ctx)`).
+- **defer ishlatish** resource cleanup uchun (`defer pool.Close()`).
 - **time.Duration** ishlat — `int` seconds emas (`timeout time.Duration`).
 
 ## 13. Backwards compatibility shimlar — TAQIQLANGAN
